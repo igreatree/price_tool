@@ -1,23 +1,24 @@
+import vm from "node:vm";
 import type {
-  Product,
-  SupplierPrice,
-  MarketplaceProductParams,
-  Expense,
-  Marketplace,
-  Rule,
-} from "../types";
+  ProductLike,
+  SupplierPriceLike,
+  MarketplaceProductParamsLike,
+  ExpenseLike,
+  MarketplaceLike,
+  RuleLike,
+} from "./types";
 import { evaluateCondition, evaluateFormula, type ExpressionContext } from "./expression";
-import { conditionGroupToExpression } from "./conditionBuilder";
+import { conditionGroupToExpression } from "./condition-builder";
 import { solvePrice } from "./solver";
 import { applyRounding } from "./rounding";
 
 export interface CalculatePriceInput {
-  product: Product;
-  supplierPrices: SupplierPrice[];
-  marketplaceParams: MarketplaceProductParams | undefined;
-  expenses: Expense[];
-  marketplace: Marketplace;
-  rules: Rule[];
+  product: ProductLike;
+  supplierPrices: SupplierPriceLike[];
+  marketplaceParams: MarketplaceProductParamsLike | undefined;
+  expenses: ExpenseLike[];
+  marketplace: MarketplaceLike;
+  rules: RuleLike[];
 }
 
 export interface CalculatePriceResult {
@@ -31,11 +32,11 @@ export interface CalculatePriceResult {
   warnings: string[];
 }
 
-function getConditionExpression(rule: Rule): string {
+function getConditionExpression(rule: RuleLike): string {
   return rule.conditionMode === "raw" ? rule.rawCondition : conditionGroupToExpression(rule.conditionGroup);
 }
 
-function computeExpensesTotal(expenses: Expense[], product: Product): number {
+function computeExpensesTotal(expenses: ExpenseLike[], product: ProductLike): number {
   return expenses
     .filter((e) => e.appliesToAll || e.productIds.includes(product.id))
     .reduce((sum, e) => sum + (e.type === "fixed" ? e.value : (e.value / 100) * product.cost), 0);
@@ -63,12 +64,17 @@ function buildContext(input: CalculatePriceInput): ExpressionContext {
   };
 }
 
-function applyPostScript(script: string | undefined, context: ExpressionContext, price: number, warnings: string[]): number {
+/**
+ * postScript — пользовательский JS, сохранённый вместе с правилом самим авторизованным
+ * пользователем приложения (тот же уровень доверия, что и раньше выполнялся на клиенте
+ * через new Function). Изолируем через vm с коротким таймаутом и без доступа к Node-глобалам.
+ */
+function applyPostScript(script: string | null | undefined, context: ExpressionContext, price: number, warnings: string[]): number {
   if (!script || !script.trim()) return price;
   try {
-    // eslint-disable-next-line no-new-func -- MVP: пользовательские скрипты правил, только локально в браузере
-    const fn = new Function("ctx", "price", script) as (ctx: ExpressionContext, price: number) => unknown;
-    const result = fn(context, price);
+    const sandbox = vm.createContext({ ctx: { ...context }, price, __result__: undefined });
+    vm.runInContext(`__result__ = (function(ctx, price) { ${script} })(ctx, price);`, sandbox, { timeout: 100 });
+    const result = (sandbox as { __result__?: unknown }).__result__;
     const num = Number(result);
     if (Number.isFinite(num)) return num;
     warnings.push("Скрипт вернул не число — результат проигнорирован");
@@ -90,7 +96,7 @@ const emptyResult = (productId: string, marketplaceId: string, warnings: string[
   warnings,
 });
 
-/** Реализует 14-шаговый алгоритм расчёта цены из ТЗ для одной пары (товар, маркетплейс). */
+/** Реализует 14-шаговый алгоритм расчёта цены для одной пары (товар, маркетплейс). */
 export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult {
   const { product, marketplace, rules } = input;
   const warnings: string[] = [];

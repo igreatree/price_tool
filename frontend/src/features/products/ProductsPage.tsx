@@ -1,18 +1,18 @@
 import { useMemo, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionIcon, Button, Drawer, Group, Modal, Stack, Text, TextInput, Title } from "@mantine/core";
 import { IconPencil, IconPlus, IconSearch, IconTrash, IconUpload } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { productsApi } from "../../api/products";
 import type { Product } from "../../types";
 import { DataTable } from "../../components/DataTable";
 import { ProductForm } from "./ProductForm";
 import { ImportProductsModal } from "./ImportProductsModal";
-import { recalcProductAllMarketplaces } from "../../engine/recalcService";
 
 export function ProductsPage() {
-  const products = useLiveQuery(() => db.products.toArray(), []);
+  const queryClient = useQueryClient();
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Product | null>(null);
   const [formOpened, setFormOpened] = useState(false);
@@ -29,10 +29,9 @@ export function ProductsPage() {
 
   async function handleDelete(product: Product) {
     if (!confirm(`Удалить товар "${product.name}"?`)) return;
-    await db.products.delete(product.id);
-    await db.supplierPrices.where("productId").equals(product.id).delete();
-    await db.marketplaceProductParams.where("productId").equals(product.id).delete();
-    await db.calculatedPrices.where("productId").equals(product.id).delete();
+    await productsApi.remove(product.id);
+    await queryClient.invalidateQueries({ queryKey: ["products"] });
+    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
   }
 
   const columns = useMemo<ColumnDef<Product, unknown>[]>(
@@ -113,16 +112,23 @@ export function ProductsPage() {
       >
         <ProductForm
           product={editing}
-          onSaved={async (product) => {
+          onSaved={async () => {
             setFormOpened(false);
-            await recalcProductAllMarketplaces(product);
+            await queryClient.invalidateQueries({ queryKey: ["products"] });
+            await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
             notifications.show({ message: "Товар сохранён, цены пересчитаны", color: "green" });
           }}
         />
       </Drawer>
 
       <Modal opened={importOpened} onClose={() => setImportOpened(false)} title="Импорт товаров из Excel" size="xl">
-        <ImportProductsModal onDone={() => setImportOpened(false)} />
+        <ImportProductsModal
+          onDone={async () => {
+            setImportOpened(false);
+            await queryClient.invalidateQueries({ queryKey: ["products"] });
+            await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
+          }}
+        />
       </Modal>
     </Stack>
   );

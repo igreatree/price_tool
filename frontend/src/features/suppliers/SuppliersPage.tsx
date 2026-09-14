@@ -1,15 +1,14 @@
 import { useMemo, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionIcon, Button, Group, Modal, NumberInput, Select, Stack, Text, TextInput, Title } from "@mantine/core";
 import { IconPlus, IconSearch, IconTrash, IconUpload } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { productsApi } from "../../api/products";
+import { supplierPricesApi } from "../../api/supplierPrices";
 import type { SupplierPrice } from "../../types";
 import { DataTable } from "../../components/DataTable";
 import { ImportSupplierPricesModal } from "./ImportSupplierPricesModal";
-import { createId } from "../../utils/id";
-import { recalcProductAllMarketplaces } from "../../engine/recalcService";
 
 interface SupplierRow extends SupplierPrice {
   productName: string;
@@ -17,8 +16,9 @@ interface SupplierRow extends SupplierPrice {
 }
 
 export function SuppliersPage() {
-  const supplierPrices = useLiveQuery(() => db.supplierPrices.toArray(), []);
-  const products = useLiveQuery(() => db.products.toArray(), []);
+  const queryClient = useQueryClient();
+  const { data: supplierPrices } = useQuery({ queryKey: ["supplierPrices"], queryFn: supplierPricesApi.list });
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const [search, setSearch] = useState("");
   const [importOpened, setImportOpened] = useState(false);
   const [addOpened, setAddOpened] = useState(false);
@@ -41,10 +41,14 @@ export function SuppliersPage() {
     );
   }, [rows, search]);
 
+  async function invalidateAfterMutation() {
+    await queryClient.invalidateQueries({ queryKey: ["supplierPrices"] });
+    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
+  }
+
   async function handleDelete(row: SupplierRow) {
-    await db.supplierPrices.delete(row.id);
-    const product = productsById.get(row.productId);
-    if (product) await recalcProductAllMarketplaces(product);
+    await supplierPricesApi.remove(row.id);
+    await invalidateAfterMutation();
   }
 
   const columns = useMemo<ColumnDef<SupplierRow, unknown>[]>(
@@ -98,11 +102,22 @@ export function SuppliersPage() {
       <DataTable data={filtered} columns={columns} getRowId={(r) => r.id} height={620} />
 
       <Modal opened={importOpened} onClose={() => setImportOpened(false)} title="Импорт цен поставщиков из Excel" size="xl">
-        <ImportSupplierPricesModal onDone={() => setImportOpened(false)} />
+        <ImportSupplierPricesModal
+          onDone={async () => {
+            setImportOpened(false);
+            await invalidateAfterMutation();
+          }}
+        />
       </Modal>
 
       <Modal opened={addOpened} onClose={() => setAddOpened(false)} title="Добавить цену поставщика">
-        <AddSupplierPriceForm products={products ?? []} onSaved={() => setAddOpened(false)} />
+        <AddSupplierPriceForm
+          products={products ?? []}
+          onSaved={async () => {
+            setAddOpened(false);
+            await invalidateAfterMutation();
+          }}
+        />
       </Modal>
     </Stack>
   );
@@ -123,16 +138,7 @@ function AddSupplierPriceForm({
 
   async function handleSubmit() {
     if (!productId || !supplierName.trim() || price === "") return;
-    const record: SupplierPrice = {
-      id: createId(),
-      productId,
-      supplierName: supplierName.trim(),
-      price: Number(price) || 0,
-      updatedAt: Date.now(),
-    };
-    await db.supplierPrices.add(record);
-    const product = await db.products.get(productId);
-    if (product) await recalcProductAllMarketplaces(product);
+    await supplierPricesApi.create({ productId, supplierName: supplierName.trim(), price: Number(price) || 0 });
     notifications.show({ message: "Цена поставщика добавлена", color: "green" });
     onSaved();
   }

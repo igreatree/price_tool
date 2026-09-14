@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Env / secrets
+.env
+!.env.example
+
+# Backend build output (in addition to the generic dist/ rule above)
+backend/generated
+backend/dist
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,14 +1,13 @@
 import { useMemo, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 import { IconSearch, IconUpload } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { db } from "../../db/db";
+import { productsApi } from "../../api/products";
+import { marketplaceParamsApi, type ParamsFieldsInput } from "../../api/marketplaceParams";
 import type { Marketplace, MarketplaceProductParams, Product } from "../../types";
 import { DataTable } from "../../components/DataTable";
 import { EditableNumberCell } from "../../components/EditableNumberCell";
-import { createId } from "../../utils/id";
-import { recalcProductForMarketplace } from "../../engine/recalcService";
 import { ImportMarketplaceParamsModal } from "./ImportMarketplaceParamsModal";
 
 interface Row {
@@ -19,11 +18,12 @@ interface Row {
 type NumericField = "discount" | "taxRate" | "commissionRate" | "logistics" | "ads" | "otherExpenses";
 
 export function MarketplaceParamsTab({ marketplace }: { marketplace: Marketplace }) {
-  const products = useLiveQuery(() => db.products.toArray(), []);
-  const paramsList = useLiveQuery(
-    () => db.marketplaceProductParams.where("marketplaceId").equals(marketplace.id).toArray(),
-    [marketplace.id],
-  );
+  const queryClient = useQueryClient();
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
+  const { data: paramsList } = useQuery({
+    queryKey: ["marketplaceParams", marketplace.id],
+    queryFn: () => marketplaceParamsApi.listByMarketplace(marketplace.id),
+  });
   const [search, setSearch] = useState("");
   const [importOpened, setImportOpened] = useState(false);
 
@@ -41,21 +41,10 @@ export function MarketplaceParamsTab({ marketplace }: { marketplace: Marketplace
   }, [rows, search]);
 
   async function saveField(row: Row, field: NumericField, value: number) {
-    const record: MarketplaceProductParams = {
-      id: row.params?.id ?? createId(),
-      productId: row.product.id,
-      marketplaceId: marketplace.id,
-      discount: row.params?.discount ?? 0,
-      taxRate: row.params?.taxRate ?? 0,
-      commissionRate: row.params?.commissionRate ?? 0,
-      logistics: row.params?.logistics ?? 0,
-      ads: row.params?.ads ?? 0,
-      otherExpenses: row.params?.otherExpenses ?? 0,
-      updatedAt: Date.now(),
-      [field]: value,
-    };
-    await db.marketplaceProductParams.put(record);
-    await recalcProductForMarketplace(row.product, marketplace);
+    const fields: ParamsFieldsInput = { [field]: value };
+    await marketplaceParamsApi.upsertField(marketplace.id, row.product.id, fields);
+    await queryClient.invalidateQueries({ queryKey: ["marketplaceParams", marketplace.id] });
+    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
   }
 
   const columns = useMemo<ColumnDef<Row, unknown>[]>(
@@ -130,7 +119,14 @@ export function MarketplaceParamsTab({ marketplace }: { marketplace: Marketplace
       <DataTable data={filtered} columns={columns} getRowId={(r) => r.product.id} height={560} rowHeight={52} />
 
       <Modal opened={importOpened} onClose={() => setImportOpened(false)} title={`Импорт параметров для «${marketplace.name}»`} size="xl">
-        <ImportMarketplaceParamsModal marketplace={marketplace} onDone={() => setImportOpened(false)} />
+        <ImportMarketplaceParamsModal
+          marketplace={marketplace}
+          onDone={async () => {
+            setImportOpened(false);
+            await queryClient.invalidateQueries({ queryKey: ["marketplaceParams", marketplace.id] });
+            await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
+          }}
+        />
       </Modal>
     </Stack>
   );

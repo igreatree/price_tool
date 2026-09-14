@@ -1,26 +1,24 @@
 import { useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ActionIcon, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { marketplacesApi } from "../../api/marketplaces";
 import type { Marketplace } from "../../types";
 import { MarketplaceForm } from "./MarketplaceForm";
-import { recalcMarketplace } from "../../engine/recalcService";
 
 export function MarketplacesPage() {
-  const marketplaces = useLiveQuery(() => db.marketplaces.toArray(), []);
+  const queryClient = useQueryClient();
+  const { data: marketplaces } = useQuery({ queryKey: ["marketplaces"], queryFn: marketplacesApi.list });
   const [opened, setOpened] = useState(false);
   const navigate = useNavigate();
 
   async function handleDelete(e: React.MouseEvent, marketplace: Marketplace) {
     e.stopPropagation();
     if (!confirm(`Удалить маркетплейс "${marketplace.name}" вместе с его правилами и расчётами?`)) return;
-    await db.marketplaces.delete(marketplace.id);
-    await db.rules.where("marketplaceId").equals(marketplace.id).delete();
-    await db.marketplaceProductParams.where("marketplaceId").equals(marketplace.id).delete();
-    await db.calculatedPrices.where("marketplaceId").equals(marketplace.id).delete();
+    await marketplacesApi.remove(marketplace.id);
+    await queryClient.invalidateQueries({ queryKey: ["marketplaces"] });
   }
 
   return (
@@ -57,10 +55,10 @@ export function MarketplacesPage() {
       <Modal opened={opened} onClose={() => setOpened(false)} title="Новый маркетплейс" size="lg">
         <MarketplaceForm
           marketplace={null}
-          onSaved={async (marketplace) => {
+          onSaved={async () => {
             setOpened(false);
             notifications.show({ message: "Маркетплейс создан", color: "green" });
-            await recalcMarketplace(marketplace);
+            await queryClient.invalidateQueries({ queryKey: ["marketplaces"] });
           }}
         />
       </Modal>

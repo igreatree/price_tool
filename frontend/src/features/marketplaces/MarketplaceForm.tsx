@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
-import { db } from "../../db/db";
-import { createId } from "../../utils/id";
+import { marketplacesApi } from "../../api/marketplaces";
 import { ExpressionInput } from "../../components/ExpressionInput";
 import type { Marketplace, RoundingMode, SolverConfig } from "../../types";
 
 interface Props {
   marketplace: Marketplace | null;
-  onSaved: (marketplace: Marketplace) => void;
+  onSaved: () => void;
 }
 
 const DEFAULT_SOLVER: SolverConfig = { minX: 1.2, maxX: 1.3, searchMultiplierMin: 0.5, searchMultiplierMax: 10, maxIterations: 200 };
@@ -24,8 +23,7 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
 
   async function handleSubmit() {
     if (!name.trim()) return;
-    const record: Marketplace = {
-      id: marketplace?.id ?? createId(),
+    const input = {
       name: name.trim(),
       pricingMode,
       rounding: {
@@ -36,10 +34,13 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
       minPriceFormula: minPriceFormula.trim(),
       maxPriceFormula: maxPriceFormula.trim(),
       solver,
-      createdAt: marketplace?.createdAt ?? Date.now(),
     };
-    await db.marketplaces.put(record);
-    onSaved(record);
+    if (marketplace) {
+      await marketplacesApi.update(marketplace.id, input);
+    } else {
+      await marketplacesApi.create(input);
+    }
+    onSaved();
   }
 
   return (

@@ -1,27 +1,31 @@
 import { useMemo, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionIcon, Badge, Button, Drawer, Group, MultiSelect, NumberInput, SegmentedControl, Stack, Switch, Text, TextInput, Title } from "@mantine/core";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { expensesApi } from "../../api/expenses";
+import { productsApi } from "../../api/products";
 import type { Expense } from "../../types";
 import { DataTable } from "../../components/DataTable";
-import { createId } from "../../utils/id";
-import { recalcAllMarketplaces } from "../../engine/recalcService";
 
 export function ExpensesPage() {
-  const expenses = useLiveQuery(() => db.expenses.toArray(), []);
-  const products = useLiveQuery(() => db.products.toArray(), []);
+  const queryClient = useQueryClient();
+  const { data: expenses } = useQuery({ queryKey: ["expenses"], queryFn: expensesApi.list });
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const [editing, setEditing] = useState<Expense | null>(null);
   const [opened, setOpened] = useState(false);
 
+  async function invalidateAfterMutation() {
+    await queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
+  }
+
   async function handleDelete(expense: Expense) {
     if (!confirm(`Удалить расход "${expense.name}"?`)) return;
-    await db.expenses.delete(expense.id);
-    notifications.show({ message: "Расход удалён. Пересчитываем цены...", color: "blue" });
-    await recalcAllMarketplaces();
-    notifications.show({ message: "Пересчёт цен завершён", color: "green" });
+    await expensesApi.remove(expense.id);
+    notifications.show({ message: "Расход удалён. Цены пересчитаны.", color: "green" });
+    await invalidateAfterMutation();
   }
 
   const columns = useMemo<ColumnDef<Expense, unknown>[]>(
@@ -92,9 +96,8 @@ export function ExpensesPage() {
           products={products ?? []}
           onSaved={async () => {
             setOpened(false);
-            notifications.show({ message: "Расход сохранён. Пересчитываем цены...", color: "blue" });
-            await recalcAllMarketplaces();
-            notifications.show({ message: "Пересчёт цен завершён", color: "green" });
+            notifications.show({ message: "Расход сохранён. Цены пересчитаны.", color: "green" });
+            await invalidateAfterMutation();
           }}
         />
       </Drawer>
@@ -121,15 +124,18 @@ function ExpenseForm({
 
   async function handleSubmit() {
     if (!name.trim()) return;
-    const record: Expense = {
-      id: expense?.id ?? createId(),
+    const input = {
       name: name.trim(),
       type,
       value: Number(value) || 0,
       appliesToAll,
       productIds: appliesToAll ? [] : productIds,
     };
-    await db.expenses.put(record);
+    if (expense) {
+      await expensesApi.update(expense.id, input);
+    } else {
+      await expensesApi.create(input);
+    }
     onSaved();
   }
 

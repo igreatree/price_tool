@@ -5,7 +5,7 @@ export interface Product {
   cost: number;
   brand: string;
   extra: Record<string, string | number>;
-  updatedAt: number;
+  updatedAt: string;
 }
 
 export interface SupplierPrice {
@@ -13,7 +13,7 @@ export interface SupplierPrice {
   productId: string;
   supplierName: string;
   price: number;
-  updatedAt: number;
+  updatedAt: string;
 }
 
 export type ExpenseType = "fixed" | "percent";
@@ -37,7 +37,7 @@ export interface MarketplaceProductParams {
   logistics: number;
   ads: number;
   otherExpenses: number;
-  updatedAt: number;
+  updatedAt: string;
 }
 
 export type RoundingMode = "none" | "nearest" | "up" | "down";
@@ -66,7 +66,7 @@ export interface Marketplace {
   minPriceFormula: string;
   maxPriceFormula: string;
   solver: SolverConfig;
-  createdAt: number;
+  createdAt: string;
 }
 
 export type ConditionOperator = "==" | "!=" | ">" | "<" | ">=" | "<=";
@@ -97,7 +97,7 @@ export interface Rule {
   rawCondition: string;
   formula: string;
   postScript?: string;
-  createdAt: number;
+  createdAt: string;
 }
 
 export interface CalculatedPrice {
@@ -109,11 +109,6 @@ export interface CalculatedPrice {
   marginRatio: number;
   appliedRuleId: string | null;
   iterations: number;
-  calculatedAt: number;
+  calculatedAt: string;
   warnings: string[];
-}
-
-export interface AppSettings {
-  id: string;
-  reportEmail: string;
 }

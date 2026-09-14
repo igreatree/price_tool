@@ -1,4 +1,4 @@
-import type { RoundingConfig } from "../types";
+import type { RoundingConfig } from "./types";
 
 function applyForceEnding(value: number, forceEnding: number): number {
   const digits = String(Math.trunc(Math.abs(forceEnding))).length;

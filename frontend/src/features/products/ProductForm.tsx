@@ -1,8 +1,7 @@
 import { useForm } from "@mantine/form";
 import { ActionIcon, Button, Group, NumberInput, Stack, Text, TextInput } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
-import { db } from "../../db/db";
-import { createId } from "../../utils/id";
+import { productsApi } from "../../api/products";
 import type { Product } from "../../types";
 
 interface ExtraFieldValue {
@@ -20,7 +19,7 @@ interface FormValues {
 
 interface Props {
   product: Product | null;
-  onSaved: (product: Product) => void;
+  onSaved: () => void;
 }
 
 export function ProductForm({ product, onSaved }: Props) {
@@ -39,9 +38,6 @@ export function ProductForm({ product, onSaved }: Props) {
   });
 
   async function handleSubmit(values: FormValues) {
-    const externalId = values.externalId.trim();
-    const existing = product ?? (await db.products.where("externalId").equals(externalId).first());
-
     const extra: Record<string, string | number> = {};
     for (const field of values.extra) {
       const key = field.key.trim();
@@ -51,18 +47,20 @@ export function ProductForm({ product, onSaved }: Props) {
       extra[key] = rawValue !== "" && Number.isFinite(num) ? num : rawValue;
     }
 
-    const record: Product = {
-      id: existing?.id ?? createId(),
-      externalId,
+    const input = {
+      externalId: values.externalId.trim(),
       name: values.name.trim(),
       brand: values.brand.trim(),
       cost: Number(values.cost) || 0,
       extra,
-      updatedAt: Date.now(),
     };
 
-    await db.products.put(record);
-    onSaved(record);
+    if (product) {
+      await productsApi.update(product.id, input);
+    } else {
+      await productsApi.create(input);
+    }
+    onSaved();
   }
 
   return (

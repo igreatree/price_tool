@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery } from "@tanstack/react-query";
 import { Alert, Badge, Button, Collapse, Group, NumberInput, Select, Stack, Switch, Text, TextInput, Textarea, Title } from "@mantine/core";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
-import { db } from "../../db/db";
-import { createId } from "../../utils/id";
+import { productsApi } from "../../api/products";
+import { supplierPricesApi } from "../../api/supplierPrices";
+import { marketplaceParamsApi } from "../../api/marketplaceParams";
+import { expensesApi } from "../../api/expenses";
+import { rulesApi } from "../../api/rules";
 import type { ConditionGroup, Marketplace, Rule } from "../../types";
 import { ConditionBuilder } from "./ConditionBuilder";
 import { ExpressionInput } from "../../components/ExpressionInput";
@@ -14,7 +17,7 @@ import { solvePrice } from "../../engine/solver";
 interface Props {
   marketplace: Marketplace;
   rule: Rule | null;
-  onSaved: (rule: Rule) => void;
+  onSaved: () => void;
 }
 
 interface PreviewResult {
@@ -40,16 +43,14 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
   const [previewProductId, setPreviewProductId] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
 
-  const products = useLiveQuery(() => db.products.toArray(), []);
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const productOptions = useMemo(() => (products ?? []).map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` })), [products]);
 
   const conditionExpr = conditionMode === "raw" ? rawCondition : conditionGroupToExpression(conditionGroup);
 
   async function handleSubmit() {
     if (!name.trim()) return;
-    const record: Rule = {
-      id: rule?.id ?? createId(),
-      marketplaceId: marketplace.id,
+    const input = {
       name: name.trim(),
       priority: Number(priority) || 0,
       enabled,
@@ -58,24 +59,28 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       rawCondition,
       formula: formula.trim(),
       postScript: postScript.trim() || undefined,
-      createdAt: rule?.createdAt ?? Date.now(),
     };
-    await db.rules.put(record);
-    onSaved(record);
+    if (rule) {
+      await rulesApi.update(rule.id, input);
+    } else {
+      await rulesApi.create(marketplace.id, input);
+    }
+    onSaved();
   }
 
   async function handlePreview() {
     if (!previewProductId) return;
-    const product = await db.products.get(previewProductId);
-    if (!product) return;
-
-    const [supplierPrices, marketplaceParams, expenses] = await Promise.all([
-      db.supplierPrices.where("productId").equals(product.id).toArray(),
-      db.marketplaceProductParams.where("[productId+marketplaceId]").equals([product.id, marketplace.id]).first(),
-      db.expenses.toArray(),
+    const [product, supplierPrices, marketplaceParamsList, expenses] = await Promise.all([
+      productsApi.get(previewProductId),
+      supplierPricesApi.list(),
+      marketplaceParamsApi.listByMarketplace(marketplace.id),
+      expensesApi.list(),
     ]);
 
-    const bestSupplierPrice = supplierPrices.length ? Math.min(...supplierPrices.map((s) => s.price)) : 0;
+    const productSupplierPrices = supplierPrices.filter((s) => s.productId === previewProductId);
+    const marketplaceParams = marketplaceParamsList.find((p) => p.productId === previewProductId);
+
+    const bestSupplierPrice = productSupplierPrices.length ? Math.min(...productSupplierPrices.map((s) => s.price)) : 0;
     const expensesTotal = expenses
       .filter((e) => e.appliesToAll || e.productIds.includes(product.id))
       .reduce((sum, e) => sum + (e.type === "fixed" ? e.value : (e.value / 100) * product.cost), 0);
@@ -87,7 +92,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       externalId: product.externalId,
       ...product.extra,
       bestSupplierPrice,
-      supplierPricesCount: supplierPrices.length,
+      supplierPricesCount: productSupplierPrices.length,
       expensesTotal,
       discount: marketplaceParams?.discount ?? 0,
       taxRate: marketplaceParams?.taxRate ?? 0,

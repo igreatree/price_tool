@@ -4,10 +4,9 @@ import { IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import type * as XLSX from "xlsx";
 import { readWorkbook, getSheetNames, sheetToMatrix, cellToNumber, cellToString } from "../../utils/excel";
-import { db } from "../../db/db";
+import { productsApi } from "../../api/products";
+import { supplierPricesApi, type SupplierPriceInput } from "../../api/supplierPrices";
 import { createId } from "../../utils/id";
-import type { SupplierPrice } from "../../types";
-import { recalcAllMarketplaces } from "../../engine/recalcService";
 
 function colLabel(index: number): string {
   let n = index;
@@ -62,11 +61,10 @@ export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
     setImporting(true);
     try {
       const rows = matrix.slice(headerRow);
-      const now = Date.now();
-      const products = await db.products.toArray();
+      const products = await productsApi.list();
       const productByExternalId = new Map(products.map((p) => [p.externalId, p]));
 
-      const records: SupplierPrice[] = [];
+      const records: SupplierPriceInput[] = [];
       let skipped = 0;
 
       for (const row of rows) {
@@ -85,23 +83,16 @@ export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
           const supplierName =
             (pair.supplierColumn !== "" ? cellToString(row[Number(pair.supplierColumn)]) : "") || pair.defaultSupplierName || "Поставщик";
 
-          records.push({
-            id: createId(),
-            productId: product.id,
-            supplierName,
-            price,
-            updatedAt: now,
-          });
+          records.push({ productId: product.id, supplierName, price });
         }
       }
 
-      await db.supplierPrices.bulkAdd(records);
+      const { imported } = await supplierPricesApi.import(records);
       notifications.show({
-        message: `Добавлено цен поставщиков: ${records.length}${skipped ? `, товаров не найдено: ${skipped}` : ""}. Пересчитываем цены...`,
-        color: "blue",
+        message: `Добавлено цен поставщиков: ${imported}${skipped ? `, товаров не найдено: ${skipped}` : ""}. Цены пересчитаны.`,
+        color: "green",
       });
       onDone();
-      void recalcAllMarketplaces().then(() => notifications.show({ message: "Пересчёт цен после импорта завершён", color: "green" }));
     } finally {
       setImporting(false);
     }

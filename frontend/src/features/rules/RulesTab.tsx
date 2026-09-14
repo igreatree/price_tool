@@ -1,30 +1,37 @@
 import { useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionIcon, Badge, Button, Drawer, Group, Stack, Switch, Text } from "@mantine/core";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { rulesApi } from "../../api/rules";
 import type { Marketplace, Rule } from "../../types";
 import { RuleForm } from "./RuleForm";
-import { recalcMarketplace } from "../../engine/recalcService";
 import { conditionGroupToExpression } from "../../engine/conditionBuilder";
 
 export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
-  const rules = useLiveQuery(() => db.rules.where("marketplaceId").equals(marketplace.id).sortBy("priority"), [marketplace.id]);
+  const queryClient = useQueryClient();
+  const { data: rules } = useQuery({
+    queryKey: ["rules", marketplace.id],
+    queryFn: () => rulesApi.listByMarketplace(marketplace.id),
+  });
   const [editing, setEditing] = useState<Rule | null>(null);
   const [opened, setOpened] = useState(false);
 
+  async function invalidateAfterMutation() {
+    await queryClient.invalidateQueries({ queryKey: ["rules", marketplace.id] });
+    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
+  }
+
   async function handleDelete(rule: Rule) {
     if (!confirm(`Удалить правило "${rule.name}"?`)) return;
-    await db.rules.delete(rule.id);
-    notifications.show({ message: "Правило удалено. Пересчитываем цены...", color: "blue" });
-    await recalcMarketplace(marketplace);
-    notifications.show({ message: "Пересчёт завершён", color: "green" });
+    await rulesApi.remove(rule.id);
+    notifications.show({ message: "Правило удалено. Цены пересчитаны.", color: "green" });
+    await invalidateAfterMutation();
   }
 
   async function toggleEnabled(rule: Rule, enabled: boolean) {
-    await db.rules.update(rule.id, { enabled });
-    await recalcMarketplace(marketplace);
+    await rulesApi.patch(rule.id, { enabled });
+    await invalidateAfterMutation();
   }
 
   return (
@@ -92,9 +99,8 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
           rule={editing}
           onSaved={async () => {
             setOpened(false);
-            notifications.show({ message: "Правило сохранено. Пересчитываем цены...", color: "blue" });
-            await recalcMarketplace(marketplace);
-            notifications.show({ message: "Пересчёт завершён", color: "green" });
+            notifications.show({ message: "Правило сохранено. Цены пересчитаны.", color: "green" });
+            await invalidateAfterMutation();
           }}
         />
       </Drawer>

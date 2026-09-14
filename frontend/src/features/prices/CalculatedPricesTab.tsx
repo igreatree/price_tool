@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { Badge, Button, Group, Progress, Stack, Text, TextInput, Tooltip } from "@mantine/core";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Badge, Button, Group, Stack, Text, TextInput, Tooltip } from "@mantine/core";
 import { IconDownload, IconRefresh, IconSearch } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { calculatedPricesApi } from "../../api/calculatedPrices";
+import { productsApi } from "../../api/products";
+import { rulesApi } from "../../api/rules";
 import type { CalculatedPrice, Marketplace, Product } from "../../types";
 import { DataTable } from "../../components/DataTable";
-import { recalcMarketplace, type RecalcProgress } from "../../engine/recalcService";
 import { exportRowsToExcel } from "../../utils/excel";
 
 interface Row extends CalculatedPrice {
@@ -16,14 +17,15 @@ interface Row extends CalculatedPrice {
 }
 
 export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace }) {
-  const calculatedPrices = useLiveQuery(
-    () => db.calculatedPrices.where("marketplaceId").equals(marketplace.id).toArray(),
-    [marketplace.id],
-  );
-  const products = useLiveQuery(() => db.products.toArray(), []);
-  const rules = useLiveQuery(() => db.rules.where("marketplaceId").equals(marketplace.id).toArray(), [marketplace.id]);
+  const queryClient = useQueryClient();
+  const { data: calculatedPrices } = useQuery({
+    queryKey: ["calculatedPrices", marketplace.id],
+    queryFn: () => calculatedPricesApi.listByMarketplace(marketplace.id),
+  });
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
+  const { data: rules } = useQuery({ queryKey: ["rules", marketplace.id], queryFn: () => rulesApi.listByMarketplace(marketplace.id) });
   const [search, setSearch] = useState("");
-  const [progress, setProgress] = useState<RecalcProgress | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
 
   const productsById = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
   const rulesById = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r])), [rules]);
@@ -45,10 +47,14 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
   }, [rows, search]);
 
   async function handleRecalc() {
-    setProgress({ done: 0, total: products?.length ?? 0 });
-    await recalcMarketplace(marketplace, (p) => setProgress(p));
-    setProgress(null);
-    notifications.show({ message: "Пересчёт завершён", color: "green" });
+    setRecalculating(true);
+    try {
+      await calculatedPricesApi.recalculate(marketplace.id);
+      await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
+      notifications.show({ message: "Пересчёт завершён", color: "green" });
+    } finally {
+      setRecalculating(false);
+    }
   }
 
   function handleExport() {
@@ -97,13 +103,11 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
           <Button variant="default" leftSection={<IconDownload size={16} />} onClick={handleExport} disabled={rows.length === 0}>
             Экспорт в Excel
           </Button>
-          <Button leftSection={<IconRefresh size={16} />} onClick={handleRecalc} loading={!!progress}>
+          <Button leftSection={<IconRefresh size={16} />} onClick={handleRecalc} loading={recalculating}>
             Пересчитать всё
           </Button>
         </Group>
       </Group>
-
-      {progress && <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} animated />}
 
       <TextInput
         placeholder="Поиск по товару"

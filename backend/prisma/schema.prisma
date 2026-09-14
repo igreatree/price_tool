@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ExpenseType {
+  fixed
+  percent
+}
+
+enum PricingMode {
+  direct
+  targetMargin
+}
+
+enum RuleConditionMode {
+  builder
+  raw
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Product {
+  id         String   @id @default(cuid())
+  externalId String   @unique
+  name       String
+  brand      String   @default("")
+  cost       Float    @default(0)
+  extra      Json     @default("{}")
+  updatedAt  DateTime @updatedAt
+
+  supplierPrices          SupplierPrice[]
+  marketplaceProductParams MarketplaceProductParams[]
+  calculatedPrices        CalculatedPrice[]
+}
+
+model SupplierPrice {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplierName String
+  price        Float
+  updatedAt    DateTime @updatedAt
+
+  @@index([productId])
+}
+
+model Expense {
+  id           String      @id @default(cuid())
+  name         String
+  type         ExpenseType
+  value        Float
+  appliesToAll Boolean     @default(false)
+  productIds   String[]    @default([])
+}
+
+model Marketplace {
+  id              String      @id @default(cuid())
+  name            String
+  pricingMode     PricingMode @default(direct)
+  rounding        Json
+  minPriceFormula String      @default("")
+  maxPriceFormula String      @default("")
+  solver          Json
+  createdAt       DateTime    @default(now())
+
+  rules                    Rule[]
+  marketplaceProductParams MarketplaceProductParams[]
+  calculatedPrices         CalculatedPrice[]
+}
+
+model Rule {
+  id            String            @id @default(cuid())
+  marketplaceId String
+  marketplace   Marketplace       @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  name          String
+  priority      Int               @default(0)
+  enabled       Boolean           @default(true)
+  conditionMode RuleConditionMode @default(builder)
+  conditionGroup Json
+  rawCondition  String            @default("")
+  formula       String
+  postScript    String?
+  createdAt     DateTime          @default(now())
+
+  @@index([marketplaceId])
+}
+
+model MarketplaceProductParams {
+  id             String      @id @default(cuid())
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplaceId  String
+  marketplace    Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  discount       Float       @default(0)
+  taxRate        Float       @default(0)
+  commissionRate Float       @default(0)
+  logistics      Float       @default(0)
+  ads            Float       @default(0)
+  otherExpenses  Float       @default(0)
+  updatedAt      DateTime    @updatedAt
+
+  @@unique([productId, marketplaceId])
+  @@index([marketplaceId])
+}
+
+model CalculatedPrice {
+  id            String      @id @default(cuid())
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplaceId String
+  marketplace   Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  price         Float
+  netProceeds   Float
+  marginRatio   Float
+  appliedRuleId String?
+  iterations    Int         @default(0)
+  calculatedAt  DateTime    @default(now())
+  warnings      String[]    @default([])
+
+  @@unique([productId, marketplaceId])
+  @@index([marketplaceId])
+}

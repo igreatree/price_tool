@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useLiveQuery } from "dexie-react-hooks";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Group, Modal, Stack, Tabs, Title } from "@mantine/core";
 import { IconPencil } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { db } from "../../db/db";
+import { marketplacesApi } from "../../api/marketplaces";
 import { MarketplaceForm } from "./MarketplaceForm";
 import { MarketplaceParamsTab } from "../marketplaceParams/MarketplaceParamsTab";
 import { RulesTab } from "../rules/RulesTab";
@@ -12,10 +12,12 @@ import { CalculatedPricesTab } from "../prices/CalculatedPricesTab";
 
 export function MarketplaceDetailPage() {
   const { marketplaceId } = useParams();
-  const marketplace = useLiveQuery(
-    () => (marketplaceId ? db.marketplaces.get(marketplaceId) : undefined),
-    [marketplaceId],
-  );
+  const queryClient = useQueryClient();
+  const { data: marketplace } = useQuery({
+    queryKey: ["marketplaces", marketplaceId],
+    queryFn: () => marketplacesApi.get(marketplaceId!),
+    enabled: !!marketplaceId,
+  });
   const [editOpened, setEditOpened] = useState(false);
 
   if (!marketplace) return null;
@@ -50,8 +52,9 @@ export function MarketplaceDetailPage() {
       <Modal opened={editOpened} onClose={() => setEditOpened(false)} title="Настройки маркетплейса" size="lg">
         <MarketplaceForm
           marketplace={marketplace}
-          onSaved={() => {
+          onSaved={async () => {
             setEditOpened(false);
+            await queryClient.invalidateQueries({ queryKey: ["marketplaces"] });
             notifications.show({
               message: "Настройки сохранены. Не забудьте нажать «Пересчитать всё» на вкладке «Расчёт цен».",
               color: "blue",

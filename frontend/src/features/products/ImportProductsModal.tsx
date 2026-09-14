@@ -4,10 +4,8 @@ import { IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import type * as XLSX from "xlsx";
 import { readWorkbook, getSheetNames, sheetToMatrix, cellToNumber, cellToString } from "../../utils/excel";
-import { db } from "../../db/db";
+import { productsApi, type ProductInput } from "../../api/products";
 import { createId } from "../../utils/id";
-import type { Product } from "../../types";
-import { recalcAllMarketplaces } from "../../engine/recalcService";
 
 function colLabel(index: number): string {
   let n = index;
@@ -60,10 +58,8 @@ export function ImportProductsModal({ onDone }: { onDone: () => void }) {
     setImporting(true);
     try {
       const rows = matrix.slice(headerRow);
-      const now = Date.now();
-      const existingByExternalId = new Map((await db.products.toArray()).map((p) => [p.externalId, p]));
 
-      const records: Product[] = [];
+      const records: ProductInput[] = [];
       for (const row of rows) {
         const externalId = cellToString(row[Number(externalIdCol)]);
         if (!externalId) continue;
@@ -80,22 +76,12 @@ export function ImportProductsModal({ onDone }: { onDone: () => void }) {
           extra[mapping.key.trim()] = str !== "" && Number.isFinite(num) && String(num) === str ? num : str;
         }
 
-        const existing = existingByExternalId.get(externalId);
-        records.push({
-          id: existing?.id ?? createId(),
-          externalId,
-          name,
-          brand,
-          cost,
-          extra,
-          updatedAt: now,
-        });
+        records.push({ externalId, name, brand, cost, extra });
       }
 
-      await db.products.bulkPut(records);
-      notifications.show({ message: `Импортировано товаров: ${records.length}. Пересчитываем цены...`, color: "blue" });
+      const { imported } = await productsApi.import(records);
+      notifications.show({ message: `Импортировано товаров: ${imported}. Цены пересчитаны.`, color: "green" });
       onDone();
-      void recalcAllMarketplaces().then(() => notifications.show({ message: "Пересчёт цен после импорта завершён", color: "green" }));
     } finally {
       setImporting(false);
     }
@@ -157,7 +143,10 @@ export function ImportProductsModal({ onDone }: { onDone: () => void }) {
                     placeholder="ключ, напр. size"
                     style={{ flex: 1 }}
                     value={mapping.key}
-                    onChange={(e) => setExtraMappings((m) => m.map((it, i) => (i === index ? { ...it, key: e.currentTarget.value } : it)))}
+                    onChange={(e) => {
+                      const value = e.currentTarget.value;
+                      setExtraMappings((m) => m.map((it, i) => (i === index ? { ...it, key: value } : it)));
+                    }}
                   />
                   <Select
                     placeholder="колонка"

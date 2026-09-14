@@ -4,10 +4,9 @@ import { IconUpload } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import type * as XLSX from "xlsx";
 import { readWorkbook, getSheetNames, sheetToMatrix, cellToNumber, cellToString } from "../../utils/excel";
-import { db } from "../../db/db";
-import { createId } from "../../utils/id";
-import type { Marketplace, MarketplaceProductParams } from "../../types";
-import { recalcMarketplace } from "../../engine/recalcService";
+import { productsApi } from "../../api/products";
+import { marketplaceParamsApi, type ImportParamsRow } from "../../api/marketplaceParams";
+import type { Marketplace } from "../../types";
 
 function colLabel(index: number): string {
   let n = index;
@@ -62,13 +61,10 @@ export function ImportMarketplaceParamsModal({ marketplace, onDone }: { marketpl
     setImporting(true);
     try {
       const rows = matrix.slice(headerRow);
-      const now = Date.now();
-      const products = await db.products.toArray();
+      const products = await productsApi.list();
       const productByExternalId = new Map(products.map((p) => [p.externalId, p]));
-      const existingParams = await db.marketplaceProductParams.where("marketplaceId").equals(marketplace.id).toArray();
-      const existingByProductId = new Map(existingParams.map((p) => [p.productId, p]));
 
-      const records: MarketplaceProductParams[] = [];
+      const records: ImportParamsRow[] = [];
       let skipped = 0;
 
       for (const row of rows) {
@@ -80,19 +76,7 @@ export function ImportMarketplaceParamsModal({ marketplace, onDone }: { marketpl
           continue;
         }
 
-        const existing = existingByProductId.get(product.id);
-        const record: MarketplaceProductParams = {
-          id: existing?.id ?? createId(),
-          productId: product.id,
-          marketplaceId: marketplace.id,
-          discount: existing?.discount ?? 0,
-          taxRate: existing?.taxRate ?? 0,
-          commissionRate: existing?.commissionRate ?? 0,
-          logistics: existing?.logistics ?? 0,
-          ads: existing?.ads ?? 0,
-          otherExpenses: existing?.otherExpenses ?? 0,
-          updatedAt: now,
-        };
+        const record: ImportParamsRow = { productId: product.id };
         for (const field of FIELDS) {
           const col = columnMap[field.key];
           if (col) {
@@ -102,13 +86,12 @@ export function ImportMarketplaceParamsModal({ marketplace, onDone }: { marketpl
         records.push(record);
       }
 
-      await db.marketplaceProductParams.bulkPut(records);
+      const { imported } = await marketplaceParamsApi.import(marketplace.id, records);
       notifications.show({
-        message: `Обновлено параметров: ${records.length}${skipped ? `, товаров не найдено: ${skipped}` : ""}. Пересчитываем цены...`,
-        color: "blue",
+        message: `Обновлено параметров: ${imported}${skipped ? `, товаров не найдено: ${skipped}` : ""}. Цены пересчитаны.`,
+        color: "green",
       });
       onDone();
-      void recalcMarketplace(marketplace).then(() => notifications.show({ message: "Пересчёт цен завершён", color: "green" }));
     } finally {
       setImporting(false);
     }

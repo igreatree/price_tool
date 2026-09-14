@@ -16,8 +16,10 @@ import {
     IconPackage,
     IconTruck,
     IconReceipt2,
+    IconLogout,
 } from "@tabler/icons-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useAuth } from "../features/auth/AuthContext";
 
 const NAV_ITEMS = [
     { to: "/products", label: "Товары", Icon: IconPackage },
@@ -33,6 +35,7 @@ export function AppShellLayout() {
         getInitialValueInEffect: true,
     });
     const location = useLocation();
+    const { username, logout } = useAuth();
 
     return (
         <AppShell
@@ -55,24 +58,35 @@ export function AppShellLayout() {
                         />
                         <Title order={4}>Ценообразование маркетплейсов</Title>
                     </Group>
-                    <ActionIcon
-                        variant="default"
-                        size="lg"
-                        onClick={() =>
-                            setColorScheme(
-                                computedColorScheme === "light"
-                                    ? "dark"
-                                    : "light",
-                            )
-                        }
-                        aria-label="Переключить тему"
-                    >
-                        {computedColorScheme === "light" ? (
-                            <IconMoon size={18} />
-                        ) : (
-                            <IconSun size={18} />
-                        )}
-                    </ActionIcon>
+                    <Group gap="xs">
+                        <ActionIcon
+                            variant="default"
+                            size="lg"
+                            onClick={() =>
+                                setColorScheme(
+                                    computedColorScheme === "light"
+                                        ? "dark"
+                                        : "light",
+                                )
+                            }
+                            aria-label="Переключить тему"
+                        >
+                            {computedColorScheme === "light" ? (
+                                <IconMoon size={18} />
+                            ) : (
+                                <IconSun size={18} />
+                            )}
+                        </ActionIcon>
+                        <ActionIcon
+                            variant="default"
+                            size="lg"
+                            onClick={() => void logout()}
+                            aria-label={`Выйти (${username})`}
+                            title={username ? `Выйти (${username})` : "Выйти"}
+                        >
+                            <IconLogout size={18} />
+                        </ActionIcon>
+                    </Group>
                 </Group>
             </AppShell.Header>
 
