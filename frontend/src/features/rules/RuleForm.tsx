@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Badge, Button, Collapse, Group, NumberInput, Select, Stack, Switch, Text, TextInput, Textarea, Title } from "@mantine/core";
+import { Alert, Badge, Button, Collapse, Group, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea, Title } from "@mantine/core";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { productsApi } from "../../api/products";
 import { supplierPricesApi } from "../../api/supplierPrices";
@@ -45,6 +45,13 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
 
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const productOptions = useMemo(() => (products ?? []).map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` })), [products]);
+  const extraKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const p of products ?? []) {
+      for (const key of Object.keys(p.extra)) keys.add(key);
+    }
+    return Array.from(keys).sort();
+  }, [products]);
 
   const conditionExpr = conditionMode === "raw" ? rawCondition : conditionGroupToExpression(conditionGroup);
 
@@ -138,6 +145,73 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       </Group>
 
       <Switch label="Правило активно" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
+
+      <Alert color="gray" variant="light" title="Переменные, доступные в условии и формуле">
+        <Table withRowBorders={false} verticalSpacing={2} fz="xs">
+          <Table.Tbody>
+            <Table.Tr>
+              <Table.Td w={140}>
+                <code>cost</code>
+              </Table.Td>
+              <Table.Td>Себестоимость товара (поле «Себестоимость» в карточке товара)</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>brand</code>, <code>name</code>, <code>externalId</code>
+              </Table.Td>
+              <Table.Td>Бренд, название и ID товара</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>bestSupplierPrice</code>
+              </Table.Td>
+              <Table.Td>Минимальная из цен поставщиков этого товара (вкладка «Цены поставщиков»)</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>supplierPricesCount</code>
+              </Table.Td>
+              <Table.Td>Сколько цен поставщиков указано для товара</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>expensesTotal</code>
+              </Table.Td>
+              <Table.Td>Сумма общих расходов, применимых к товару (вкладка «Расходы»)</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>discount</code>, <code>taxRate</code>, <code>commissionRate</code>, <code>logistics</code>, <code>ads</code>,{" "}
+                <code>otherExpenses</code>
+              </Table.Td>
+              <Table.Td>
+                Задаются для каждого товара на вкладке маркетплейса «Параметры товаров» — не в карточке товара. По умолчанию 0.
+              </Table.Td>
+            </Table.Tr>
+            {marketplace.pricingMode === "targetMargin" && (
+              <Table.Tr>
+                <Table.Td>
+                  <code>price</code>
+                </Table.Td>
+                <Table.Td>
+                  Только в формуле чистой выручки: цена, которую подбирает решатель. Формула описывает выручку <em>как функцию от price</em>, а
+                  не саму цену.
+                </Table.Td>
+              </Table.Tr>
+            )}
+            {extraKeys.length > 0 && (
+              <Table.Tr>
+                <Table.Td>
+                  {extraKeys.map((k) => (
+                    <code key={k}>{k} </code>
+                  ))}
+                </Table.Td>
+                <Table.Td>Ваши «Дополнительные параметры» из карточек товаров (используются в условиях/формулах как есть)</Table.Td>
+              </Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
+      </Alert>
 
       <div>
         <Group justify="space-between" mb="xs">

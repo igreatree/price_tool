@@ -20,6 +20,8 @@ docker-compose.yml
 4. `cd frontend && npm install && npm run dev` — поднимет фронтенд на `http://localhost:5173` (запросы к `/api` проксируются на `localhost:3000`, см. `vite.config.ts`).
 5. Откройте `http://localhost:5173`, войдите под `ADMIN_USERNAME`/`ADMIN_PASSWORD` из `backend/.env`.
 
+При запуске через `npm run dev` запросы фронтенда к `/api` идут через встроенный прокси Vite — CORS тут не участвует. Если вместо этого фронтенд обращается к API напрямую по другому адресу/порту (например, к бэкенду, поднятому отдельно в Docker), укажите его источник в `CORS_ORIGIN` в `backend/.env` (по умолчанию `http://localhost:5173`).
+
 ## Продакшен-деплой на VPS (Docker + Traefik + HTTPS)
 
 Предполагается, что DNS-запись `price.bagini.shop` уже указывает на IP VPS, и на сервере установлен Docker с Compose plugin.
