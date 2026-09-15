@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseArrayPipe, Patch, Post, Put } from "@nestjs/common";
 import { RulesService } from "./rules.service";
-import { CreateRuleBodyDto, PatchRuleDto, UpdateRuleDto } from "./dto/rule.dto";
+import { CreateRuleBodyDto, ImportRuleRowDto, PatchRuleDto, UpdateRuleDto } from "./dto/rule.dto";
 
 @Controller("marketplaces/:marketplaceId/rules")
 export class MarketplaceRulesController {
@@ -14,6 +14,14 @@ export class MarketplaceRulesController {
   @Post()
   create(@Param("marketplaceId") marketplaceId: string, @Body() dto: CreateRuleBodyDto) {
     return this.service.create(marketplaceId, dto);
+  }
+
+  @Post("import")
+  import(
+    @Param("marketplaceId") marketplaceId: string,
+    @Body(new ParseArrayPipe({ items: ImportRuleRowDto })) rows: ImportRuleRowDto[],
+  ) {
+    return this.service.importRows(marketplaceId, rows);
   }
 }
 

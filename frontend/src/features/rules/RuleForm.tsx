@@ -117,6 +117,11 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       ...product.extra,
       bestSupplierPrice,
       supplierPricesCount: productSupplierPrices.length,
+      supplierPrice: (supplierName: string) => {
+        const needle = String(supplierName ?? "").trim().toLowerCase();
+        const matches = productSupplierPrices.filter((s) => s.supplierName.trim().toLowerCase() === needle);
+        return matches.length ? Math.min(...matches.map((s) => s.price)) : 0;
+      },
       expensesTotal,
       discount: marketplaceParams?.discount ?? 0,
       taxRate: marketplaceParams?.taxRate ?? 0,
@@ -189,6 +194,17 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
                 <code>supplierPricesCount</code>
               </Table.Td>
               <Table.Td>Сколько цен поставщиков указано для товара</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>supplierPrice("Имя")</code>
+              </Table.Td>
+              <Table.Td>
+                Цена конкретного поставщика по имени (как оно указано в «Цены поставщиков»), без учёта регистра. 0, если у товара нет цены от
+                такого поставщика — например, условие <code>supplierPrice("Ozon Wholesale") &gt; 0</code> сработает только если у товара есть
+                цена именно от этого поставщика, а формула может использовать <code>supplierPrice("Ozon Wholesale") * 1.3</code> вместо{" "}
+                <code>bestSupplierPrice</code>.
+              </Table.Td>
             </Table.Tr>
             <Table.Tr>
               <Table.Td>

@@ -42,6 +42,20 @@ function computeExpensesTotal(expenses: ExpenseLike[], product: ProductLike): nu
     .reduce((sum, e) => sum + (e.type === "fixed" ? e.value : (e.value / 100) * product.cost), 0);
 }
 
+/**
+ * Позволяет в условии/формуле правила сослаться на цену конкретного поставщика по имени,
+ * а не только на bestSupplierPrice (минимум по всем). Сравнение без учёта регистра/пробелов;
+ * если у товара несколько записей от одного поставщика — берётся минимальная; если поставщика
+ * с таким именем нет — 0 (как и остальные отсутствующие числовые переменные контекста).
+ */
+function makeSupplierPriceLookup(supplierPrices: SupplierPriceLike[]): (supplierName: string) => number {
+  return (supplierName: string) => {
+    const needle = String(supplierName ?? "").trim().toLowerCase();
+    const matches = supplierPrices.filter((s) => s.supplierName.trim().toLowerCase() === needle);
+    return matches.length ? Math.min(...matches.map((s) => s.price)) : 0;
+  };
+}
+
 function buildContext(input: CalculatePriceInput): ExpressionContext {
   const { product, supplierPrices, marketplaceParams, expenses } = input;
   const bestSupplierPrice = supplierPrices.length ? Math.min(...supplierPrices.map((s) => s.price)) : 0;
@@ -54,6 +68,7 @@ function buildContext(input: CalculatePriceInput): ExpressionContext {
     ...product.extra,
     bestSupplierPrice,
     supplierPricesCount: supplierPrices.length,
+    supplierPrice: makeSupplierPriceLookup(supplierPrices),
     expensesTotal: computeExpensesTotal(expenses, product),
     discount: marketplaceParams?.discount ?? 0,
     taxRate: marketplaceParams?.taxRate ?? 0,

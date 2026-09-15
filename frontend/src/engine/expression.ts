@@ -5,7 +5,7 @@ const parser = new Parser();
 parser.functions.contains = (haystack: unknown, needle: unknown) =>
   String(haystack ?? "").toLowerCase().includes(String(needle ?? "").toLowerCase());
 
-export type ExpressionContext = Record<string, number | string>;
+export type ExpressionContext = Record<string, number | string | ((...args: any[]) => number)>;
 
 export class ExpressionError extends Error {}
 

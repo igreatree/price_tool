@@ -77,3 +77,27 @@ export class PatchRuleDto {
   @IsInt()
   priority?: number;
 }
+
+/** Строка импорта из Excel/Google Sheets — условие всегда как raw-выражение (без структурированного builder-режима). */
+export class ImportRuleRowDto {
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsInt()
+  priority!: number;
+
+  @IsBoolean()
+  enabled!: boolean;
+
+  @IsOptional()
+  @IsString()
+  rawCondition?: string;
+
+  @IsString()
+  formula!: string;
+
+  @IsOptional()
+  @IsString()
+  postScript?: string;
+}

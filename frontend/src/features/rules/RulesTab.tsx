@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ActionIcon, Badge, Button, Center, Drawer, Group, Loader, Stack, Switch, Text } from "@mantine/core";
-import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import { ActionIcon, Badge, Button, Center, Drawer, Group, Loader, Modal, Stack, Switch, Text } from "@mantine/core";
+import { IconDownload, IconPencil, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { rulesApi } from "../../api/rules";
 import type { Marketplace, Rule } from "../../types";
 import { RuleForm } from "./RuleForm";
+import { ImportRulesModal } from "./ImportRulesModal";
 import { conditionGroupToExpression } from "../../engine/conditionBuilder";
+import { exportRowsToExcel } from "../../utils/excel";
+import { RULE_SHEET_COLUMNS } from "./ruleSheetColumns";
 
 export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
   const queryClient = useQueryClient();
@@ -16,6 +19,7 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
   });
   const [editing, setEditing] = useState<Rule | null>(null);
   const [opened, setOpened] = useState(false);
+  const [importOpened, setImportOpened] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
@@ -46,21 +50,46 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
     }
   }
 
+  function handleExport() {
+    const exportRows = (rules ?? []).map((rule) => ({
+      [RULE_SHEET_COLUMNS.name]: rule.name,
+      [RULE_SHEET_COLUMNS.priority]: rule.priority,
+      [RULE_SHEET_COLUMNS.enabled]: rule.enabled,
+      [RULE_SHEET_COLUMNS.condition]: conditionGroupToExpression(rule.conditionGroup) || rule.rawCondition || "",
+      [RULE_SHEET_COLUMNS.formula]: rule.formula,
+      [RULE_SHEET_COLUMNS.postScript]: rule.postScript ?? "",
+    }));
+    exportRowsToExcel("Правила", exportRows, `${marketplace.name}_правила.xlsx`);
+  }
+
   return (
     <Stack>
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
           Правила проверяются по возрастанию приоритета — применяется первое подошедшее.
         </Text>
-        <Button
-          leftSection={<IconPlus size={16} />}
-          onClick={() => {
-            setEditing(null);
-            setOpened(true);
-          }}
-        >
-          Добавить правило
-        </Button>
+        <Group>
+          <Button
+            variant="default"
+            leftSection={<IconDownload size={16} />}
+            onClick={handleExport}
+            disabled={!rules || rules.length === 0}
+          >
+            Экспорт
+          </Button>
+          <Button variant="default" leftSection={<IconUpload size={16} />} onClick={() => setImportOpened(true)}>
+            Импорт
+          </Button>
+          <Button
+            leftSection={<IconPlus size={16} />}
+            onClick={() => {
+              setEditing(null);
+              setOpened(true);
+            }}
+          >
+            Добавить правило
+          </Button>
+        </Group>
       </Group>
 
       {isLoading && (
@@ -133,6 +162,16 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
           }}
         />
       </Drawer>
+
+      <Modal opened={importOpened} onClose={() => setImportOpened(false)} title={`Импорт правил для «${marketplace.name}»`} size="lg">
+        <ImportRulesModal
+          marketplace={marketplace}
+          onDone={async () => {
+            setImportOpened(false);
+            await invalidateAfterMutation();
+          }}
+        />
+      </Modal>
     </Stack>
   );
 }

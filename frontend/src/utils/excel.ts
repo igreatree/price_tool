@@ -16,6 +16,13 @@ export function sheetToMatrix(workbook: XLSX.WorkBook, sheetName: string): unkno
   return XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "", raw: true });
 }
 
+/** Возвращает лист как объекты по заголовкам первой строки — для фиксированных, известных заранее форматов. */
+export function sheetToObjects(workbook: XLSX.WorkBook, sheetName: string): Record<string, unknown>[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: true });
+}
+
 export function exportRowsToExcel(sheetName: string, rows: Record<string, unknown>[], fileName: string): void {
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
@@ -33,4 +40,10 @@ export function cellToNumber(value: unknown): number {
   const str = cellToString(value).replace(",", ".").replace(/\s/g, "");
   const num = Number(str);
   return Number.isFinite(num) ? num : 0;
+}
+
+export function cellToBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  const str = cellToString(value).toLowerCase();
+  return ["true", "1", "да", "истина", "yes"].includes(str);
 }
