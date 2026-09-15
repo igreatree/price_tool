@@ -48,7 +48,7 @@ export function DataTable<T>({
 
   return (
     <ScrollArea.Autosize mah={height} viewportRef={scrollRef} type="always" offsetScrollbars>
-      <Table striped highlightOnHover stickyHeader withTableBorder verticalSpacing="xs">
+      <Table highlightOnHover stickyHeader withTableBorder verticalSpacing="xs">
         <Table.Thead>
           {table.getHeaderGroups().map((headerGroup) => (
             <Table.Tr key={headerGroup.id}>
@@ -92,7 +92,10 @@ export function DataTable<T>({
               <Table.Tr
                 key={row.id}
                 onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                style={onRowClick ? { cursor: "pointer" } : undefined}
+                style={{
+                  cursor: onRowClick ? "pointer" : undefined,
+                  backgroundColor: virtualRow.index % 2 === 1 ? "var(--table-striped-color)" : undefined,
+                }}
               >
                 {row.getVisibleCells().map((cell) => (
                   <Table.Td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</Table.Td>
