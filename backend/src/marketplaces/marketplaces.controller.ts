@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from "@nestjs/common";
 import { MarketplacesService } from "./marketplaces.service";
 import { CreateMarketplaceDto, UpdateMarketplaceDto } from "./dto/marketplace.dto";
 
@@ -27,6 +27,7 @@ export class MarketplacesController {
   }
 
   @Delete(":id")
+  @HttpCode(204)
   remove(@Param("id") id: string) {
     return this.service.remove(id);
   }

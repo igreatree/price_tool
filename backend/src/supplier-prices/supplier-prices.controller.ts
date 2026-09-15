@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseArrayPipe, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseArrayPipe, Post } from "@nestjs/common";
 import { SupplierPricesService } from "./supplier-prices.service";
 import { CreateSupplierPriceDto, ImportSupplierPriceRowDto } from "./dto/supplier-price.dto";
 
@@ -17,6 +17,7 @@ export class SupplierPricesController {
   }
 
   @Delete(":id")
+  @HttpCode(204)
   remove(@Param("id") id: string) {
     return this.service.remove(id);
   }

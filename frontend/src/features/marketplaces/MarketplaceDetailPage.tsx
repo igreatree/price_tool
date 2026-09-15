@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Group, Modal, Stack, Tabs, Title } from "@mantine/core";
+import { Button, Center, Group, Loader, Modal, Stack, Tabs, Title } from "@mantine/core";
 import { IconPencil } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { marketplacesApi } from "../../api/marketplaces";
@@ -20,7 +20,13 @@ export function MarketplaceDetailPage() {
   });
   const [editOpened, setEditOpened] = useState(false);
 
-  if (!marketplace) return null;
+  if (!marketplace) {
+    return (
+      <Center py="xl">
+        <Loader />
+      </Center>
+    );
+  }
 
   return (
     <Stack>

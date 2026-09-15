@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from "@nestjs/common";
 import { ExpensesService } from "./expenses.service";
 import { CreateExpenseDto, UpdateExpenseDto } from "./dto/expense.dto";
 
@@ -22,6 +22,7 @@ export class ExpensesController {
   }
 
   @Delete(":id")
+  @HttpCode(204)
   remove(@Param("id") id: string) {
     return this.service.remove(id);
   }

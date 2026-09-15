@@ -39,8 +39,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         throw new ApiError(res.status, message);
     }
 
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
+    // Void endpoints (e.g. DELETE handlers) can come back as 200/204 with an empty body —
+    // res.json() throws on an empty string, so check for actual content first.
+    const text = await res.text();
+    if (!text) return undefined as T;
+    return JSON.parse(text) as T;
 }
 
 export const api = {

@@ -17,11 +17,12 @@ interface SupplierRow extends SupplierPrice {
 
 export function SuppliersPage() {
   const queryClient = useQueryClient();
-  const { data: supplierPrices } = useQuery({ queryKey: ["supplierPrices"], queryFn: supplierPricesApi.list });
+  const { data: supplierPrices, isLoading } = useQuery({ queryKey: ["supplierPrices"], queryFn: supplierPricesApi.list });
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const [search, setSearch] = useState("");
   const [importOpened, setImportOpened] = useState(false);
   const [addOpened, setAddOpened] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const productsById = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
 
@@ -47,8 +48,13 @@ export function SuppliersPage() {
   }
 
   async function handleDelete(row: SupplierRow) {
-    await supplierPricesApi.remove(row.id);
-    await invalidateAfterMutation();
+    setDeletingId(row.id);
+    try {
+      await supplierPricesApi.remove(row.id);
+      await invalidateAfterMutation();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const columns = useMemo<ColumnDef<SupplierRow, unknown>[]>(
@@ -62,7 +68,13 @@ export function SuppliersPage() {
         header: "",
         cell: ({ row }) => (
           <Group justify="flex-end">
-            <ActionIcon variant="subtle" color="red" onClick={() => handleDelete(row.original)} aria-label="Удалить">
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              loading={deletingId === row.original.id}
+              onClick={() => handleDelete(row.original)}
+              aria-label="Удалить"
+            >
               <IconTrash size={16} />
             </ActionIcon>
           </Group>
@@ -70,7 +82,7 @@ export function SuppliersPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [productsById],
+    [productsById, deletingId],
   );
 
   return (
@@ -99,7 +111,7 @@ export function SuppliersPage() {
         {search ? `, найдено: ${filtered.length}` : ""}
       </Text>
 
-      <DataTable data={filtered} columns={columns} getRowId={(r) => r.id} height={620} />
+      <DataTable data={filtered} columns={columns} getRowId={(r) => r.id} height={620} loading={isLoading} />
 
       <Modal opened={importOpened} onClose={() => setImportOpened(false)} title="Импорт цен поставщиков из Excel" size="xl">
         <ImportSupplierPricesModal
@@ -133,14 +145,20 @@ function AddSupplierPriceForm({
   const [productId, setProductId] = useState<string | null>(null);
   const [supplierName, setSupplierName] = useState("");
   const [price, setPrice] = useState<number | string>("");
+  const [saving, setSaving] = useState(false);
 
   const options = products.map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` }));
 
   async function handleSubmit() {
     if (!productId || !supplierName.trim() || price === "") return;
-    await supplierPricesApi.create({ productId, supplierName: supplierName.trim(), price: Number(price) || 0 });
-    notifications.show({ message: "Цена поставщика добавлена", color: "green" });
-    onSaved();
+    setSaving(true);
+    try {
+      await supplierPricesApi.create({ productId, supplierName: supplierName.trim(), price: Number(price) || 0 });
+      notifications.show({ message: "Цена поставщика добавлена", color: "green" });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -149,7 +167,9 @@ function AddSupplierPriceForm({
       <TextInput label="Поставщик" value={supplierName} onChange={(e) => setSupplierName(e.currentTarget.value)} required />
       <NumberInput label="Цена" min={0} decimalScale={2} value={price} onChange={setPrice} required />
       <Group justify="flex-end">
-        <Button onClick={handleSubmit}>Сохранить</Button>
+        <Button onClick={handleSubmit} loading={saving}>
+          Сохранить
+        </Button>
       </Group>
     </Stack>
   );

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ActionIcon, Badge, Button, Card, Group, Modal, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Badge, Button, Card, Center, Group, Loader, Modal, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { marketplacesApi } from "../../api/marketplaces";
@@ -10,15 +10,21 @@ import { MarketplaceForm } from "./MarketplaceForm";
 
 export function MarketplacesPage() {
   const queryClient = useQueryClient();
-  const { data: marketplaces } = useQuery({ queryKey: ["marketplaces"], queryFn: marketplacesApi.list });
+  const { data: marketplaces, isLoading } = useQuery({ queryKey: ["marketplaces"], queryFn: marketplacesApi.list });
   const [opened, setOpened] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   async function handleDelete(e: React.MouseEvent, marketplace: Marketplace) {
     e.stopPropagation();
     if (!confirm(`Удалить маркетплейс "${marketplace.name}" вместе с его правилами и расчётами?`)) return;
-    await marketplacesApi.remove(marketplace.id);
-    await queryClient.invalidateQueries({ queryKey: ["marketplaces"] });
+    setDeletingId(marketplace.id);
+    try {
+      await marketplacesApi.remove(marketplace.id);
+      await queryClient.invalidateQueries({ queryKey: ["marketplaces"] });
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -30,12 +36,24 @@ export function MarketplacesPage() {
         </Button>
       </Group>
 
+      {isLoading && (
+        <Center py="xl">
+          <Loader size="sm" />
+        </Center>
+      )}
+
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
         {(marketplaces ?? []).map((m) => (
           <Card key={m.id} withBorder padding="lg" onClick={() => navigate(`/marketplaces/${m.id}`)} style={{ cursor: "pointer" }}>
             <Group justify="space-between" mb="xs">
               <Text fw={600}>{m.name}</Text>
-              <ActionIcon variant="subtle" color="red" onClick={(e) => handleDelete(e, m)} aria-label="Удалить">
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                loading={deletingId === m.id}
+                onClick={(e) => handleDelete(e, m)}
+                aria-label="Удалить"
+              >
                 <IconTrash size={16} />
               </ActionIcon>
             </Group>

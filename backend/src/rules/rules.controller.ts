@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from "@nestjs/common";
 import { RulesService } from "./rules.service";
 import { CreateRuleBodyDto, PatchRuleDto, UpdateRuleDto } from "./dto/rule.dto";
 
@@ -32,6 +32,7 @@ export class RulesController {
   }
 
   @Delete(":id")
+  @HttpCode(204)
   remove(@Param("id") id: string) {
     return this.service.remove(id);
   }

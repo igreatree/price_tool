@@ -18,7 +18,7 @@ interface Row extends CalculatedPrice {
 
 export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace }) {
   const queryClient = useQueryClient();
-  const { data: calculatedPrices } = useQuery({
+  const { data: calculatedPrices, isLoading } = useQuery({
     queryKey: ["calculatedPrices", marketplace.id],
     queryFn: () => calculatedPricesApi.listByMarketplace(marketplace.id),
   });
@@ -116,7 +116,7 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
 
-      <DataTable data={filtered} columns={columns} getRowId={(r) => r.id} height={560} />
+      <DataTable data={filtered} columns={columns} getRowId={(r) => r.id} height={560} loading={isLoading} />
     </Stack>
   );
 }

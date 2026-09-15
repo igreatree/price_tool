@@ -42,6 +42,8 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
 
   const [previewProductId, setPreviewProductId] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const productOptions = useMemo(() => (products ?? []).map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` })), [products]);
@@ -67,15 +69,30 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       formula: formula.trim(),
       postScript: postScript.trim() || undefined,
     };
-    if (rule) {
-      await rulesApi.update(rule.id, input);
-    } else {
-      await rulesApi.create(marketplace.id, input);
+    setSaving(true);
+    try {
+      if (rule) {
+        await rulesApi.update(rule.id, input);
+      } else {
+        await rulesApi.create(marketplace.id, input);
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   async function handlePreview() {
+    if (!previewProductId) return;
+    setPreviewing(true);
+    try {
+      await runPreview();
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
+  async function runPreview() {
     if (!previewProductId) return;
     const [product, supplierPrices, marketplaceParamsList, expenses] = await Promise.all([
       productsApi.get(previewProductId),
@@ -283,7 +300,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
           searchable
           style={{ flex: 1 }}
         />
-        <Button variant="default" onClick={handlePreview} disabled={!previewProductId}>
+        <Button variant="default" onClick={handlePreview} disabled={!previewProductId} loading={previewing}>
           Рассчитать
         </Button>
       </Group>
@@ -306,7 +323,9 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       )}
 
       <Group justify="flex-end" mt="md">
-        <Button onClick={handleSubmit}>Сохранить правило</Button>
+        <Button onClick={handleSubmit} loading={saving}>
+          Сохранить правило
+        </Button>
       </Group>
     </Stack>
   );

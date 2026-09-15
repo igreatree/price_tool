@@ -11,10 +11,11 @@ import { DataTable } from "../../components/DataTable";
 
 export function ExpensesPage() {
   const queryClient = useQueryClient();
-  const { data: expenses } = useQuery({ queryKey: ["expenses"], queryFn: expensesApi.list });
+  const { data: expenses, isLoading } = useQuery({ queryKey: ["expenses"], queryFn: expensesApi.list });
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const [editing, setEditing] = useState<Expense | null>(null);
   const [opened, setOpened] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function invalidateAfterMutation() {
     await queryClient.invalidateQueries({ queryKey: ["expenses"] });
@@ -23,9 +24,14 @@ export function ExpensesPage() {
 
   async function handleDelete(expense: Expense) {
     if (!confirm(`Удалить расход "${expense.name}"?`)) return;
-    await expensesApi.remove(expense.id);
-    notifications.show({ message: "Расход удалён. Цены пересчитаны.", color: "green" });
-    await invalidateAfterMutation();
+    setDeletingId(expense.id);
+    try {
+      await expensesApi.remove(expense.id);
+      notifications.show({ message: "Расход удалён. Цены пересчитаны.", color: "green" });
+      await invalidateAfterMutation();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const columns = useMemo<ColumnDef<Expense, unknown>[]>(
@@ -58,14 +64,20 @@ export function ExpensesPage() {
             >
               <IconPencil size={16} />
             </ActionIcon>
-            <ActionIcon variant="subtle" color="red" onClick={() => handleDelete(row.original)} aria-label="Удалить">
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              loading={deletingId === row.original.id}
+              onClick={() => handleDelete(row.original)}
+              aria-label="Удалить"
+            >
               <IconTrash size={16} />
             </ActionIcon>
           </Group>
         ),
       },
     ],
-    [],
+    [deletingId],
   );
 
   return (
@@ -88,7 +100,7 @@ export function ExpensesPage() {
         правил.
       </Text>
 
-      <DataTable data={expenses ?? []} columns={columns} getRowId={(e) => e.id} height={500} />
+      <DataTable data={expenses ?? []} columns={columns} getRowId={(e) => e.id} height={500} loading={isLoading} />
 
       <Drawer opened={opened} onClose={() => setOpened(false)} title={editing ? "Редактирование расхода" : "Новый расход"} position="right" size="md">
         <ExpenseForm
@@ -119,6 +131,7 @@ function ExpenseForm({
   const [value, setValue] = useState<number | string>(expense?.value ?? 0);
   const [appliesToAll, setAppliesToAll] = useState(expense?.appliesToAll ?? true);
   const [productIds, setProductIds] = useState<string[]>(expense?.productIds ?? []);
+  const [saving, setSaving] = useState(false);
 
   const options = products.map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` }));
 
@@ -131,12 +144,17 @@ function ExpenseForm({
       appliesToAll,
       productIds: appliesToAll ? [] : productIds,
     };
-    if (expense) {
-      await expensesApi.update(expense.id, input);
-    } else {
-      await expensesApi.create(input);
+    setSaving(true);
+    try {
+      if (expense) {
+        await expensesApi.update(expense.id, input);
+      } else {
+        await expensesApi.create(input);
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -154,7 +172,9 @@ function ExpenseForm({
       <Switch label="Применяется ко всем товарам" checked={appliesToAll} onChange={(e) => setAppliesToAll(e.currentTarget.checked)} />
       {!appliesToAll && <MultiSelect label="Товары" data={options} value={productIds} onChange={setProductIds} searchable clearable />}
       <Group justify="flex-end">
-        <Button onClick={handleSubmit}>Сохранить</Button>
+        <Button onClick={handleSubmit} loading={saving}>
+          Сохранить
+        </Button>
       </Group>
     </Stack>
   );

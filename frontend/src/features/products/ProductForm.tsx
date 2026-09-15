@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "@mantine/form";
 import { ActionIcon, Button, Group, NumberInput, Stack, Text, TextInput } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export function ProductForm({ product, onSaved }: Props) {
+  const [saving, setSaving] = useState(false);
   const form = useForm<FormValues>({
     initialValues: {
       externalId: product?.externalId ?? "",
@@ -55,12 +57,17 @@ export function ProductForm({ product, onSaved }: Props) {
       extra,
     };
 
-    if (product) {
-      await productsApi.update(product.id, input);
-    } else {
-      await productsApi.create(input);
+    setSaving(true);
+    try {
+      if (product) {
+        await productsApi.update(product.id, input);
+      } else {
+        await productsApi.create(input);
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -101,7 +108,9 @@ export function ProductForm({ product, onSaved }: Props) {
         </div>
 
         <Group justify="flex-end" mt="md">
-          <Button type="submit">Сохранить</Button>
+          <Button type="submit" loading={saving}>
+            Сохранить
+          </Button>
         </Group>
       </Stack>
     </form>

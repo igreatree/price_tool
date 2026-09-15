@@ -8,6 +8,7 @@ import {
     useMantineColorScheme,
     useComputedColorScheme,
 } from "@mantine/core";
+import { useState } from "react";
 import { useDisclosure } from "@mantine/hooks";
 import {
     IconSun,
@@ -36,6 +37,16 @@ export function AppShellLayout() {
     });
     const location = useLocation();
     const { username, logout } = useAuth();
+    const [loggingOut, setLoggingOut] = useState(false);
+
+    async function handleLogout() {
+        setLoggingOut(true);
+        try {
+            await logout();
+        } finally {
+            setLoggingOut(false);
+        }
+    }
 
     return (
         <AppShell
@@ -80,7 +91,8 @@ export function AppShellLayout() {
                         <ActionIcon
                             variant="default"
                             size="lg"
-                            onClick={() => void logout()}
+                            loading={loggingOut}
+                            onClick={handleLogout}
                             aria-label={`Выйти (${username})`}
                             title={username ? `Выйти (${username})` : "Выйти"}
                         >

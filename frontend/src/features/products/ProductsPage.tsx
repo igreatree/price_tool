@@ -12,11 +12,12 @@ import { ImportProductsModal } from "./ImportProductsModal";
 
 export function ProductsPage() {
   const queryClient = useQueryClient();
-  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
+  const { data: products, isLoading } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Product | null>(null);
   const [formOpened, setFormOpened] = useState(false);
   const [importOpened, setImportOpened] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     if (!products) return [];
@@ -29,9 +30,14 @@ export function ProductsPage() {
 
   async function handleDelete(product: Product) {
     if (!confirm(`Удалить товар "${product.name}"?`)) return;
-    await productsApi.remove(product.id);
-    await queryClient.invalidateQueries({ queryKey: ["products"] });
-    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
+    setDeletingId(product.id);
+    try {
+      await productsApi.remove(product.id);
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["calculatedPrices"] });
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const columns = useMemo<ColumnDef<Product, unknown>[]>(
@@ -59,14 +65,20 @@ export function ProductsPage() {
             >
               <IconPencil size={16} />
             </ActionIcon>
-            <ActionIcon variant="subtle" color="red" onClick={() => handleDelete(row.original)} aria-label="Удалить">
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              loading={deletingId === row.original.id}
+              onClick={() => handleDelete(row.original)}
+              aria-label="Удалить"
+            >
               <IconTrash size={16} />
             </ActionIcon>
           </Group>
         ),
       },
     ],
-    [],
+    [deletingId],
   );
 
   return (
@@ -101,7 +113,7 @@ export function ProductsPage() {
         {search ? `, найдено: ${filtered.length}` : ""}
       </Text>
 
-      <DataTable data={filtered} columns={columns} getRowId={(p) => p.id} height={620} />
+      <DataTable data={filtered} columns={columns} getRowId={(p) => p.id} height={620} loading={isLoading} />
 
       <Drawer
         opened={formOpened}

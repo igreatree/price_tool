@@ -20,6 +20,7 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
   const [minPriceFormula, setMinPriceFormula] = useState(marketplace?.minPriceFormula ?? "");
   const [maxPriceFormula, setMaxPriceFormula] = useState(marketplace?.maxPriceFormula ?? "");
   const [solver, setSolver] = useState<SolverConfig>(marketplace?.solver ?? DEFAULT_SOLVER);
+  const [saving, setSaving] = useState(false);
 
   async function handleSubmit() {
     if (!name.trim()) return;
@@ -35,12 +36,17 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
       maxPriceFormula: maxPriceFormula.trim(),
       solver,
     };
-    if (marketplace) {
-      await marketplacesApi.update(marketplace.id, input);
-    } else {
-      await marketplacesApi.create(input);
+    setSaving(true);
+    try {
+      if (marketplace) {
+        await marketplacesApi.update(marketplace.id, input);
+      } else {
+        await marketplacesApi.create(input);
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   }
 
   return (
@@ -143,7 +149,9 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
       )}
 
       <Group justify="flex-end" mt="md">
-        <Button onClick={handleSubmit}>Сохранить</Button>
+        <Button onClick={handleSubmit} loading={saving}>
+          Сохранить
+        </Button>
       </Group>
     </Stack>
   );

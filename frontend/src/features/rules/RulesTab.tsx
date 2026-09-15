@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ActionIcon, Badge, Button, Drawer, Group, Stack, Switch, Text } from "@mantine/core";
+import { ActionIcon, Badge, Button, Center, Drawer, Group, Loader, Stack, Switch, Text } from "@mantine/core";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { rulesApi } from "../../api/rules";
@@ -10,12 +10,14 @@ import { conditionGroupToExpression } from "../../engine/conditionBuilder";
 
 export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
   const queryClient = useQueryClient();
-  const { data: rules } = useQuery({
+  const { data: rules, isLoading } = useQuery({
     queryKey: ["rules", marketplace.id],
     queryFn: () => rulesApi.listByMarketplace(marketplace.id),
   });
   const [editing, setEditing] = useState<Rule | null>(null);
   const [opened, setOpened] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   async function invalidateAfterMutation() {
     await queryClient.invalidateQueries({ queryKey: ["rules", marketplace.id] });
@@ -24,14 +26,24 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
 
   async function handleDelete(rule: Rule) {
     if (!confirm(`Удалить правило "${rule.name}"?`)) return;
-    await rulesApi.remove(rule.id);
-    notifications.show({ message: "Правило удалено. Цены пересчитаны.", color: "green" });
-    await invalidateAfterMutation();
+    setDeletingId(rule.id);
+    try {
+      await rulesApi.remove(rule.id);
+      notifications.show({ message: "Правило удалено. Цены пересчитаны.", color: "green" });
+      await invalidateAfterMutation();
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function toggleEnabled(rule: Rule, enabled: boolean) {
-    await rulesApi.patch(rule.id, { enabled });
-    await invalidateAfterMutation();
+    setTogglingId(rule.id);
+    try {
+      await rulesApi.patch(rule.id, { enabled });
+      await invalidateAfterMutation();
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   return (
@@ -51,6 +63,12 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
         </Button>
       </Group>
 
+      {isLoading && (
+        <Center py="lg">
+          <Loader size="sm" />
+        </Center>
+      )}
+
       <Stack gap="xs">
         {(rules ?? []).map((rule) => (
           <Group
@@ -69,7 +87,12 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
               </Text>
             </div>
             <Group>
-              <Switch checked={rule.enabled} onChange={(e) => toggleEnabled(rule, e.currentTarget.checked)} label="Активно" />
+              <Switch
+                checked={rule.enabled}
+                disabled={togglingId === rule.id}
+                onChange={(e) => toggleEnabled(rule, e.currentTarget.checked)}
+                label="Активно"
+              />
               <ActionIcon
                 variant="subtle"
                 onClick={() => {
@@ -80,7 +103,13 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
               >
                 <IconPencil size={16} />
               </ActionIcon>
-              <ActionIcon variant="subtle" color="red" onClick={() => handleDelete(rule)} aria-label="Удалить">
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                loading={deletingId === rule.id}
+                onClick={() => handleDelete(rule)}
+                aria-label="Удалить"
+              >
                 <IconTrash size={16} />
               </ActionIcon>
             </Group>

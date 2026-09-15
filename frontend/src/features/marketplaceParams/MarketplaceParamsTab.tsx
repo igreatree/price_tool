@@ -19,8 +19,8 @@ type NumericField = "discount" | "taxRate" | "commissionRate" | "logistics" | "a
 
 export function MarketplaceParamsTab({ marketplace }: { marketplace: Marketplace }) {
   const queryClient = useQueryClient();
-  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
-  const { data: paramsList } = useQuery({
+  const { data: products, isLoading: productsLoading } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
+  const { data: paramsList, isLoading: paramsLoading } = useQuery({
     queryKey: ["marketplaceParams", marketplace.id],
     queryFn: () => marketplaceParamsApi.listByMarketplace(marketplace.id),
   });
@@ -116,7 +116,14 @@ export function MarketplaceParamsTab({ marketplace }: { marketplace: Marketplace
         onChange={(e) => setSearch(e.currentTarget.value)}
       />
 
-      <DataTable data={filtered} columns={columns} getRowId={(r) => r.product.id} height={560} rowHeight={52} />
+      <DataTable
+        data={filtered}
+        columns={columns}
+        getRowId={(r) => r.product.id}
+        height={560}
+        rowHeight={52}
+        loading={productsLoading || paramsLoading}
+      />
 
       <Modal opened={importOpened} onClose={() => setImportOpened(false)} title={`Импорт параметров для «${marketplace.name}»`} size="xl">
         <ImportMarketplaceParamsModal

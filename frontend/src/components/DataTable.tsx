@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { ScrollArea, Table, Text, Center } from "@mantine/core";
+import { ScrollArea, Table, Text, Center, Loader } from "@mantine/core";
 
 interface DataTableProps<T> {
   data: T[];
@@ -11,6 +11,7 @@ interface DataTableProps<T> {
   getRowId?: (row: T, index: number) => string;
   onRowClick?: (row: T) => void;
   emptyLabel?: string;
+  loading?: boolean;
 }
 
 export function DataTable<T>({
@@ -21,6 +22,7 @@ export function DataTable<T>({
   getRowId,
   onRowClick,
   emptyLabel = "Нет данных",
+  loading = false,
 }: DataTableProps<T>) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -59,7 +61,16 @@ export function DataTable<T>({
           ))}
         </Table.Thead>
         <Table.Tbody>
-          {rows.length === 0 && (
+          {loading && (
+            <Table.Tr>
+              <Table.Td colSpan={columns.length}>
+                <Center py="lg">
+                  <Loader size="sm" />
+                </Center>
+              </Table.Td>
+            </Table.Tr>
+          )}
+          {!loading && rows.length === 0 && (
             <Table.Tr>
               <Table.Td colSpan={columns.length}>
                 <Center py="lg">
