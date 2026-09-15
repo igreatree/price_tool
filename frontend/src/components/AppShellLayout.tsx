@@ -56,7 +56,7 @@ export function AppShellLayout() {
                             hiddenFrom="sm"
                             size="sm"
                         />
-                        <Title order={4}>Ценообразование маркетплейсов</Title>
+                        <Title order={4}>Price.BAGINI</Title>
                     </Group>
                     <Group gap="xs">
                         <ActionIcon
