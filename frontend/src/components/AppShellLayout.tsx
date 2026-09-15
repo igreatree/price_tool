@@ -7,6 +7,7 @@ import {
     ActionIcon,
     useMantineColorScheme,
     useComputedColorScheme,
+    Image,
 } from "@mantine/core";
 import { useState } from "react";
 import { useDisclosure } from "@mantine/hooks";
@@ -21,6 +22,7 @@ import {
 } from "@tabler/icons-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext";
+import Logo from "../assets/logo.svg";
 
 const NAV_ITEMS = [
     { to: "/products", label: "Товары", Icon: IconPackage },
@@ -67,7 +69,12 @@ export function AppShellLayout() {
                             hiddenFrom="sm"
                             size="sm"
                         />
-                        <Title order={4}>Price.BAGINI</Title>
+                        <Group gap={1}>
+                            <Image w={80} src={Logo} />
+                            <Title mb="4" order={2}>
+                                .PRICE
+                            </Title>
+                        </Group>
                     </Group>
                     <Group gap="xs">
                         <ActionIcon
