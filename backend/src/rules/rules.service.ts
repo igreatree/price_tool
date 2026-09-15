@@ -24,6 +24,7 @@ export class RulesService {
         marketplaceId,
         conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue,
         rawCondition: dto.rawCondition ?? "",
+        postScript: dto.postScript?.trim() || null,
       },
     });
     await this.recalcService.recalcMarketplace(record.marketplaceId);
@@ -33,7 +34,12 @@ export class RulesService {
   async update(id: string, dto: UpdateRuleDto) {
     const record = await this.prisma.rule.update({
       where: { id },
-      data: { ...dto, conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue, rawCondition: dto.rawCondition ?? "" },
+      data: {
+        ...dto,
+        conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue,
+        rawCondition: dto.rawCondition ?? "",
+        postScript: dto.postScript?.trim() || null,
+      },
     });
     await this.recalcService.recalcMarketplace(record.marketplaceId);
     return record;
