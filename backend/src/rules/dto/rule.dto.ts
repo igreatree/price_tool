@@ -18,8 +18,8 @@ export class ConditionRowDto {
   @IsString()
   field!: string;
 
-  @IsIn(["==", "!=", ">", "<", ">=", "<="])
-  operator!: "==" | "!=" | ">" | "<" | ">=" | "<=";
+  @IsIn(["==", "!=", ">", "<", ">=", "<=", "contains", "notContains"])
+  operator!: "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "notContains";
 
   @IsString()
   value!: string;

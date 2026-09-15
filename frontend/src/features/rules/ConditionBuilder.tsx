@@ -10,6 +10,8 @@ const OPERATORS: { value: ConditionOperator; label: string }[] = [
   { value: "<", label: "<" },
   { value: ">=", label: "≥" },
   { value: "<=", label: "≤" },
+  { value: "contains", label: "содержит" },
+  { value: "notContains", label: "не содержит" },
 ];
 
 interface Props {
@@ -58,7 +60,7 @@ export function ConditionBuilder({ group, onChange, fieldSuggestions = [] }: Pro
             data={OPERATORS}
             value={row.operator}
             onChange={(v) => updateRow(index, { operator: (v as ConditionOperator) ?? "==" })}
-            w={80}
+            w={140}
             allowDeselect={false}
           />
           <TextInput

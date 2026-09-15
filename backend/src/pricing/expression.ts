@@ -1,6 +1,9 @@
 import { Parser, type Expression } from "expr-eval";
 
 const parser = new Parser();
+// Регистронезависимая подстрока — используется оператором «содержит» в условиях правил.
+parser.functions.contains = (haystack: unknown, needle: unknown) =>
+  String(haystack ?? "").toLowerCase().includes(String(needle ?? "").toLowerCase());
 
 export type ExpressionContext = Record<string, number | string>;
 

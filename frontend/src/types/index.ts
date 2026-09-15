@@ -69,7 +69,7 @@ export interface Marketplace {
   createdAt: string;
 }
 
-export type ConditionOperator = "==" | "!=" | ">" | "<" | ">=" | "<=";
+export type ConditionOperator = "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "notContains";
 export type ConditionJoiner = "AND" | "OR";
 
 export interface ConditionRow {

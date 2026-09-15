@@ -2,7 +2,7 @@ export type ExpenseType = "fixed" | "percent";
 export type PricingMode = "direct" | "targetMargin";
 export type RuleConditionMode = "builder" | "raw";
 export type RoundingMode = "none" | "nearest" | "up" | "down";
-export type ConditionOperator = "==" | "!=" | ">" | "<" | ">=" | "<=";
+export type ConditionOperator = "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "notContains";
 export type ConditionJoiner = "AND" | "OR";
 
 export interface RoundingConfig {
