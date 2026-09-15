@@ -66,6 +66,8 @@ export interface Marketplace {
   minPriceFormula: string;
   maxPriceFormula: string;
   solver: SolverConfig;
+  excludedProductIds: string[];
+  exclusionCondition: string;
   createdAt: string;
 }
 

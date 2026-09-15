@@ -73,6 +73,8 @@ export interface MarketplaceLike {
   minPriceFormula: string;
   maxPriceFormula: string;
   solver: SolverConfig;
+  excludedProductIds: string[];
+  exclusionCondition: string;
 }
 
 export interface RuleLike {

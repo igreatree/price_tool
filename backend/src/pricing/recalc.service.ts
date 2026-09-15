@@ -43,6 +43,8 @@ function toMarketplaceLike(m: Marketplace): MarketplaceLike {
     minPriceFormula: m.minPriceFormula,
     maxPriceFormula: m.maxPriceFormula,
     solver: m.solver as unknown as SolverConfig,
+    excludedProductIds: m.excludedProductIds,
+    exclusionCondition: m.exclusionCondition,
   };
 }
 
@@ -66,6 +68,29 @@ export class RecalcService {
   constructor(private readonly prisma: PrismaService) {}
 
   private async persist(result: CalculatePriceResult): Promise<void> {
+    if (result.excluded) {
+      // Исключённый товар: цену не трогаем — только фиксируем предупреждение и время проверки.
+      // Если записи ещё не было (первый расчёт для этой пары), создаём с нулевой ценой — трогать нечего.
+      await this.prisma.calculatedPrice.upsert({
+        where: { productId_marketplaceId: { productId: result.productId, marketplaceId: result.marketplaceId } },
+        create: {
+          productId: result.productId,
+          marketplaceId: result.marketplaceId,
+          price: 0,
+          netProceeds: 0,
+          marginRatio: 0,
+          appliedRuleId: null,
+          iterations: 0,
+          warnings: result.warnings,
+        },
+        update: {
+          warnings: result.warnings,
+          calculatedAt: new Date(),
+        },
+      });
+      return;
+    }
+
     await this.prisma.calculatedPrice.upsert({
       where: { productId_marketplaceId: { productId: result.productId, marketplaceId: result.marketplaceId } },
       create: {

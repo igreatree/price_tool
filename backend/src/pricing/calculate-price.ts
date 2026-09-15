@@ -30,7 +30,12 @@ export interface CalculatePriceResult {
   appliedRuleId: string | null;
   iterations: number;
   warnings: string[];
+  /** Товар исключён из автоперерасчёта для этого маркетплейса — вызывающая сторона (RecalcService)
+   * не должна перезаписывать price/netProceeds/marginRatio существующей записи, только warnings. */
+  excluded?: boolean;
 }
+
+export const EXCLUDED_WARNING = "Товар исключён из автоперерасчёта цены для этого маркетплейса";
 
 function getConditionExpression(rule: RuleLike): string {
   return rule.conditionMode === "raw" ? rule.rawCondition : conditionGroupToExpression(rule.conditionGroup);
@@ -111,17 +116,33 @@ const emptyResult = (productId: string, marketplaceId: string, warnings: string[
   warnings,
 });
 
+/** Явный список ID или условие на вкладке настроек маркетплейса — если совпало, цену не трогаем. */
+function isProductExcluded(input: CalculatePriceInput, context: ExpressionContext): boolean {
+  const { product, marketplace } = input;
+  if (marketplace.excludedProductIds.includes(product.id)) return true;
+  if (!marketplace.exclusionCondition.trim()) return false;
+  try {
+    return evaluateCondition(marketplace.exclusionCondition, context);
+  } catch {
+    return false;
+  }
+}
+
 /** Реализует 14-шаговый алгоритм расчёта цены для одной пары (товар, маркетплейс). */
 export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult {
   const { product, marketplace, rules } = input;
   const warnings: string[] = [];
 
+  const context = buildContext(input);
+
+  if (isProductExcluded(input, context)) {
+    return { ...emptyResult(product.id, marketplace.id, [EXCLUDED_WARNING]), excluded: true };
+  }
+
   if (!Number.isFinite(product.cost) || product.cost <= 0) {
     warnings.push("Себестоимость не задана или не больше нуля");
     return emptyResult(product.id, marketplace.id, warnings);
   }
-
-  const context = buildContext(input);
 
   const activeRules = rules
     .filter((r) => r.enabled && r.marketplaceId === marketplace.id)

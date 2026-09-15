@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Button, Group, NumberInput, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Button, Group, MultiSelect, NumberInput, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
 import { marketplacesApi } from "../../api/marketplaces";
+import { productsApi } from "../../api/products";
 import { ExpressionInput } from "../../components/ExpressionInput";
 import type { Marketplace, RoundingMode, SolverConfig } from "../../types";
 
@@ -20,7 +22,12 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
   const [minPriceFormula, setMinPriceFormula] = useState(marketplace?.minPriceFormula ?? "");
   const [maxPriceFormula, setMaxPriceFormula] = useState(marketplace?.maxPriceFormula ?? "");
   const [solver, setSolver] = useState<SolverConfig>(marketplace?.solver ?? DEFAULT_SOLVER);
+  const [excludedProductIds, setExcludedProductIds] = useState<string[]>(marketplace?.excludedProductIds ?? []);
+  const [exclusionCondition, setExclusionCondition] = useState(marketplace?.exclusionCondition ?? "");
   const [saving, setSaving] = useState(false);
+
+  const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
+  const productOptions = useMemo(() => (products ?? []).map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` })), [products]);
 
   async function handleSubmit() {
     if (!name.trim()) return;
@@ -35,6 +42,8 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
       minPriceFormula: minPriceFormula.trim(),
       maxPriceFormula: maxPriceFormula.trim(),
       solver,
+      excludedProductIds,
+      exclusionCondition: exclusionCondition.trim(),
     };
     setSaving(true);
     try {
@@ -103,6 +112,33 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
         onChange={setMinPriceFormula}
       />
       <ExpressionInput label="Формула максимальной цены (необязательно)" placeholder="10000" value={maxPriceFormula} onChange={setMaxPriceFormula} />
+
+      <div>
+        <Text size="sm" fw={500} mb={4}>
+          Исключения из автоперерасчёта цены
+        </Text>
+        <Text size="xs" c="dimmed" mb="xs">
+          Цена этих товаров не будет меняться при пересчёте (вручную или автоматически после правок) для этого маркетплейса — в таблице
+          «Расчёт цен» они помечаются предупреждением «исключён».
+        </Text>
+        <Stack gap="xs">
+          <MultiSelect
+            label="Исключённые товары"
+            placeholder="Выберите товары"
+            data={productOptions}
+            value={excludedProductIds}
+            onChange={setExcludedProductIds}
+            searchable
+            clearable
+          />
+          <ExpressionInput
+            label="Условие исключения (необязательно)"
+            placeholder='brand == "Discontinued"'
+            value={exclusionCondition}
+            onChange={setExclusionCondition}
+          />
+        </Stack>
+      </div>
 
       {pricingMode === "targetMargin" && (
         <>

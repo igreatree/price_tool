@@ -23,6 +23,8 @@ export class MarketplacesService {
         solver: dto.solver as unknown as Prisma.InputJsonValue,
         minPriceFormula: dto.minPriceFormula ?? "",
         maxPriceFormula: dto.maxPriceFormula ?? "",
+        excludedProductIds: dto.excludedProductIds ?? [],
+        exclusionCondition: dto.exclusionCondition ?? "",
       },
     });
   }
@@ -36,6 +38,8 @@ export class MarketplacesService {
         solver: dto.solver as unknown as Prisma.InputJsonValue,
         minPriceFormula: dto.minPriceFormula ?? "",
         maxPriceFormula: dto.maxPriceFormula ?? "",
+        excludedProductIds: dto.excludedProductIds ?? [],
+        exclusionCondition: dto.exclusionCondition ?? "",
       },
     });
   }

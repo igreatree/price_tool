@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsIn, IsNumber, IsOptional, IsString, MinLength, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsNumber, IsOptional, IsString, MinLength, ValidateNested } from "class-validator";
 
 export class RoundingConfigDto {
   @IsIn(["none", "nearest", "up", "down"])
@@ -53,6 +53,15 @@ export class CreateMarketplaceDto {
   @ValidateNested()
   @Type(() => SolverConfigDto)
   solver!: SolverConfigDto;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  excludedProductIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  exclusionCondition?: string;
 }
 
 export class UpdateMarketplaceDto extends CreateMarketplaceDto {}

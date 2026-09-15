@@ -64,14 +64,16 @@ model Expense {
 }
 
 model Marketplace {
-  id              String      @id @default(cuid())
-  name            String
-  pricingMode     PricingMode @default(direct)
-  rounding        Json
-  minPriceFormula String      @default("")
-  maxPriceFormula String      @default("")
-  solver          Json
-  createdAt       DateTime    @default(now())
+  id                 String      @id @default(cuid())
+  name               String
+  pricingMode        PricingMode @default(direct)
+  rounding           Json
+  minPriceFormula    String      @default("")
+  maxPriceFormula    String      @default("")
+  solver             Json
+  excludedProductIds String[]    @default([])
+  exclusionCondition String      @default("")
+  createdAt          DateTime    @default(now())
 
   rules                    Rule[]
   marketplaceProductParams MarketplaceProductParams[]

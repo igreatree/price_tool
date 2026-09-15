@@ -8,6 +8,8 @@ export interface MarketplaceInput {
   minPriceFormula?: string;
   maxPriceFormula?: string;
   solver: SolverConfig;
+  excludedProductIds?: string[];
+  exclusionCondition?: string;
 }
 
 export const marketplacesApi = {
