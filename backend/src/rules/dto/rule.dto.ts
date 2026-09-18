@@ -64,6 +64,11 @@ export class CreateRuleBodyDto {
   @IsOptional()
   @IsString()
   postScript?: string;
+
+  /** Если false — при совпадении условия каскад продолжается к следующему подходящему правилу
+   * (по приоритету), которому передаётся цена этого правила через prevPrice. */
+  @IsBoolean()
+  isFinal!: boolean;
 }
 
 export class UpdateRuleDto extends CreateRuleBodyDto {}
@@ -100,4 +105,8 @@ export class ImportRuleRowDto {
   @IsOptional()
   @IsString()
   postScript?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isFinal?: boolean;
 }

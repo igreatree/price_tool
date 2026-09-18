@@ -7,4 +7,5 @@ export const RULE_SHEET_COLUMNS = {
   condition: "Условие",
   formula: "Формула",
   postScript: "Скрипт",
+  isFinal: "Финальное",
 } as const;

@@ -88,4 +88,7 @@ export interface RuleLike {
   rawCondition: string;
   formula: string;
   postScript?: string | null;
+  /** Если false — цена этого правила передаётся дальше как prevPrice следующему подходящему правилу
+   * вместо того, чтобы сразу становиться окончательной. */
+  isFinal: boolean;
 }

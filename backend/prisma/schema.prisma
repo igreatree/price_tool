@@ -92,6 +92,10 @@ model Rule {
   rawCondition  String            @default("")
   formula       String
   postScript    String?
+  /** Если false — при совпадении условия расчёт не останавливается на этом правиле, а продолжает
+   * искать следующее подходящее правило (по возрастанию приоритета), передавая ему цену этого
+   * правила через переменную prevPrice. Так правила можно каскадировать. */
+  isFinal       Boolean           @default(true)
   createdAt     DateTime          @default(now())
 
   @@index([marketplaceId])
@@ -125,6 +129,8 @@ model CalculatedPrice {
   netProceeds   Float
   marginRatio   Float
   appliedRuleId String?
+  /** Вся цепочка применённых правил по порядку (для каскадных правил — несколько id, иначе один). */
+  appliedRuleIds String[]   @default([])
   iterations    Int         @default(0)
   calculatedAt  DateTime    @default(now())
   warnings      String[]    @default([])

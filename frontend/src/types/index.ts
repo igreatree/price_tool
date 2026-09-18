@@ -99,6 +99,9 @@ export interface Rule {
   rawCondition: string;
   formula: string;
   postScript?: string;
+  /** Если false — при совпадении условия каскад продолжается к следующему подходящему правилу
+   * (по приоритету), которому передаётся цена этого правила через переменную prevPrice. */
+  isFinal: boolean;
   createdAt: string;
 }
 
@@ -110,6 +113,7 @@ export interface CalculatedPrice {
   netProceeds: number;
   marginRatio: number;
   appliedRuleId: string | null;
+  appliedRuleIds: string[];
   iterations: number;
   calculatedAt: string;
   warnings: string[];

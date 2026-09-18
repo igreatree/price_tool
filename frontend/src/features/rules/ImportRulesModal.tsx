@@ -30,6 +30,12 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
           rawCondition: cellToString(getCell(row, RULE_SHEET_COLUMNS.condition)),
           formula: cellToString(getCell(row, RULE_SHEET_COLUMNS.formula)),
           postScript: cellToString(getCell(row, RULE_SHEET_COLUMNS.postScript)) || undefined,
+          // Нет колонки «Финальное» — значит файл экспортирован до появления каскадных правил,
+          // считаем все правила финальными (прежнее поведение).
+          isFinal: (() => {
+            const cell = getCell(row, RULE_SHEET_COLUMNS.isFinal);
+            return cell === undefined ? true : cellToBoolean(cell);
+          })(),
         }))
         .filter((r) => r.name && r.formula),
     [objects],
@@ -72,9 +78,10 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
 
           <Alert color="blue" variant="light">
             Ожидаются колонки: «{RULE_SHEET_COLUMNS.name}», «{RULE_SHEET_COLUMNS.priority}», «{RULE_SHEET_COLUMNS.enabled}», «
-            {RULE_SHEET_COLUMNS.condition}», «{RULE_SHEET_COLUMNS.formula}», «{RULE_SHEET_COLUMNS.postScript}» (необязательно) — именно
-            в этом формате «Экспорт» сохраняет файл. Условие всегда загружается как сырое выражение. Правило с таким же названием в этом
-            маркетплейсе будет обновлено, иначе — создано новое.
+            {RULE_SHEET_COLUMNS.condition}», «{RULE_SHEET_COLUMNS.formula}», «{RULE_SHEET_COLUMNS.postScript}» (необязательно), «
+            {RULE_SHEET_COLUMNS.isFinal}» (необязательно, по умолчанию «да») — именно в этом формате «Экспорт» сохраняет файл. Условие
+            всегда загружается как сырое выражение. Правило с таким же названием в этом маркетплейсе будет обновлено, иначе — создано
+            новое.
           </Alert>
 
           {rows.length > 0 ? (
@@ -87,6 +94,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
                     <Table.Th>{RULE_SHEET_COLUMNS.enabled}</Table.Th>
                     <Table.Th>{RULE_SHEET_COLUMNS.condition}</Table.Th>
                     <Table.Th>{RULE_SHEET_COLUMNS.formula}</Table.Th>
+                    <Table.Th>{RULE_SHEET_COLUMNS.isFinal}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -97,6 +105,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
                       <Table.Td>{r.enabled ? "да" : "нет"}</Table.Td>
                       <Table.Td>{r.rawCondition || "—"}</Table.Td>
                       <Table.Td>{r.formula}</Table.Td>
+                      <Table.Td>{r.isFinal ? "да" : "нет"}</Table.Td>
                     </Table.Tr>
                   ))}
                 </Table.Tbody>

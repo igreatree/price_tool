@@ -60,6 +60,7 @@ function toRuleLike(r: Rule): RuleLike {
     rawCondition: r.rawCondition,
     formula: r.formula,
     postScript: r.postScript,
+    isFinal: r.isFinal,
   };
 }
 
@@ -80,6 +81,7 @@ export class RecalcService {
           netProceeds: 0,
           marginRatio: 0,
           appliedRuleId: null,
+          appliedRuleIds: [],
           iterations: 0,
           warnings: result.warnings,
         },
@@ -100,6 +102,7 @@ export class RecalcService {
         netProceeds: result.netProceeds,
         marginRatio: result.marginRatio,
         appliedRuleId: result.appliedRuleId,
+        appliedRuleIds: result.appliedRuleIds,
         iterations: result.iterations,
         warnings: result.warnings,
       },
@@ -108,6 +111,7 @@ export class RecalcService {
         netProceeds: result.netProceeds,
         marginRatio: result.marginRatio,
         appliedRuleId: result.appliedRuleId,
+        appliedRuleIds: result.appliedRuleIds,
         iterations: result.iterations,
         warnings: result.warnings,
         calculatedAt: new Date(),

@@ -58,6 +58,7 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
       [RULE_SHEET_COLUMNS.condition]: conditionGroupToExpression(rule.conditionGroup) || rule.rawCondition || "",
       [RULE_SHEET_COLUMNS.formula]: rule.formula,
       [RULE_SHEET_COLUMNS.postScript]: rule.postScript ?? "",
+      [RULE_SHEET_COLUMNS.isFinal]: rule.isFinal,
     }));
     exportRowsToExcel("Правила", exportRows, `${marketplace.name}_правила.xlsx`);
   }
@@ -66,7 +67,8 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
     <Stack>
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
-          Правила проверяются по возрастанию приоритета — применяется первое подошедшее.
+          Правила проверяются по возрастанию приоритета — применяется первое подошедшее. Если оно не финальное, расчёт продолжается со
+          следующим подходящим правилом, которому передаётся его цена.
         </Text>
         <Group>
           <Button
@@ -110,6 +112,11 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
               <Group gap="xs">
                 <Text fw={600}>{rule.name}</Text>
                 <Badge variant="light">приоритет {rule.priority}</Badge>
+                {!rule.isFinal && (
+                  <Badge variant="light" color="grape">
+                    каскадное
+                  </Badge>
+                )}
               </Group>
               <Text size="xs" c="dimmed" mt={2}>
                 {conditionGroupToExpression(rule.conditionGroup) || rule.rawCondition || "без условия (всегда)"}

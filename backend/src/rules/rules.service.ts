@@ -75,6 +75,7 @@ export class RulesService {
           rawCondition: row.rawCondition ?? "",
           formula: row.formula.trim(),
           postScript: row.postScript?.trim() || null,
+          isFinal: row.isFinal ?? true,
         };
         return match
           ? this.prisma.rule.update({ where: { id: match.id }, data })

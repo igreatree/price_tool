@@ -10,6 +10,7 @@ export interface RuleInput {
   rawCondition?: string;
   formula: string;
   postScript?: string;
+  isFinal: boolean;
 }
 
 export interface RuleImportRow {
@@ -19,6 +20,7 @@ export interface RuleImportRow {
   rawCondition?: string;
   formula: string;
   postScript?: string;
+  isFinal?: boolean;
 }
 
 export const rulesApi = {

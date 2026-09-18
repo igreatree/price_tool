@@ -27,7 +27,11 @@ export interface CalculatePriceResult {
   price: number;
   netProceeds: number;
   marginRatio: number;
+  /** Последнее (финальное) правило в применённой цепочке — для обратной совместимости. */
   appliedRuleId: string | null;
+  /** Вся цепочка применённых правил по порядку — длиннее одного элемента только при каскадных
+   * (не финальных) правилах. */
+  appliedRuleIds: string[];
   iterations: number;
   warnings: string[];
   /** Товар исключён из автоперерасчёта для этого маркетплейса — вызывающая сторона (RecalcService)
@@ -112,6 +116,7 @@ const emptyResult = (productId: string, marketplaceId: string, warnings: string[
   netProceeds: 0,
   marginRatio: 0,
   appliedRuleId: null,
+  appliedRuleIds: [],
   iterations: 0,
   warnings,
 });
@@ -148,51 +153,78 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     .filter((r) => r.enabled && r.marketplaceId === marketplace.id)
     .sort((a, b) => a.priority - b.priority);
 
-  const matchedRule = activeRules.find((rule) => {
-    const conditionExpr = getConditionExpression(rule);
-    try {
-      return evaluateCondition(conditionExpr, context);
-    } catch (e) {
-      warnings.push(`Правило "${rule.name}": ошибка в условии — ${e instanceof Error ? e.message : String(e)}`);
-      return false;
-    }
-  });
+  /**
+   * Каскад: правила проверяются по возрастанию приоритета. Если подошедшее правило не финальное
+   * (isFinal === false), его цена передаётся следующему подходящему правилу через prevPrice
+   * (0, если ещё ни одно правило не сработало) — вместо того, чтобы сразу стать итоговой. Поиск
+   * следующего правила продолжается строго после позиции текущего в отсортированном списке, поэтому
+   * одно и то же правило не может сработать дважды и бесконечный цикл невозможен.
+   */
+  let price = 0;
+  let netProceeds = 0;
+  let marginRatio = 0;
+  let iterations = 0;
+  const appliedRuleIds: string[] = [];
+  let lastAppliedRule: RuleLike | null = null;
+  let lastStageContext: ExpressionContext = context;
+  let searchFrom = 0;
 
-  if (!matchedRule) {
+  for (;;) {
+    const matchIndex = activeRules.findIndex((rule, idx) => {
+      if (idx < searchFrom) return false;
+      const conditionExpr = getConditionExpression(rule);
+      try {
+        return evaluateCondition(conditionExpr, { ...context, prevPrice: price });
+      } catch (e) {
+        warnings.push(`Правило "${rule.name}": ошибка в условии — ${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+    });
+    if (matchIndex === -1) break;
+
+    const rule = activeRules[matchIndex];
+    const stageContext: ExpressionContext = { ...context, prevPrice: price };
+
+    try {
+      if (marketplace.pricingMode === "direct") {
+        price = evaluateFormula(rule.formula, stageContext);
+        netProceeds = price - product.cost - (context.expensesTotal as number);
+        marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
+      } else {
+        const solved = solvePrice(
+          (candidatePrice) => evaluateFormula(rule.formula, { ...stageContext, price: candidatePrice }),
+          product.cost,
+          marketplace.solver,
+        );
+        price = solved.price;
+        netProceeds = solved.netProceeds;
+        marginRatio = solved.marginRatio;
+        iterations += solved.iterations;
+        if (!solved.converged) {
+          warnings.push(`Решение не найдено за ${marketplace.solver.maxIterations} итераций — взята ближайшая цена`);
+        }
+      }
+    } catch (e) {
+      warnings.push(`Правило "${rule.name}": ошибка в формуле — ${e instanceof Error ? e.message : String(e)}`);
+      if (appliedRuleIds.length === 0) {
+        return emptyResult(product.id, marketplace.id, warnings);
+      }
+      break;
+    }
+
+    price = applyPostScript(rule.postScript, stageContext, price, warnings);
+    appliedRuleIds.push(rule.id);
+    lastAppliedRule = rule;
+    lastStageContext = stageContext;
+
+    if (rule.isFinal) break;
+    searchFrom = matchIndex + 1;
+  }
+
+  if (!lastAppliedRule) {
     warnings.push("Ни одно правило не подошло для этого товара");
     return emptyResult(product.id, marketplace.id, warnings);
   }
-
-  let price: number;
-  let netProceeds: number;
-  let marginRatio: number;
-  let iterations = 0;
-
-  try {
-    if (marketplace.pricingMode === "direct") {
-      price = evaluateFormula(matchedRule.formula, context);
-      netProceeds = price - product.cost - (context.expensesTotal as number);
-      marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
-    } else {
-      const solved = solvePrice(
-        (candidatePrice) => evaluateFormula(matchedRule.formula, { ...context, price: candidatePrice }),
-        product.cost,
-        marketplace.solver,
-      );
-      price = solved.price;
-      netProceeds = solved.netProceeds;
-      marginRatio = solved.marginRatio;
-      iterations = solved.iterations;
-      if (!solved.converged) {
-        warnings.push(`Решение не найдено за ${marketplace.solver.maxIterations} итераций — взята ближайшая цена`);
-      }
-    }
-  } catch (e) {
-    warnings.push(`Правило "${matchedRule.name}": ошибка в формуле — ${e instanceof Error ? e.message : String(e)}`);
-    return emptyResult(product.id, marketplace.id, warnings);
-  }
-
-  price = applyPostScript(matchedRule.postScript, context, price, warnings);
 
   if (marketplace.minPriceFormula.trim()) {
     try {
@@ -222,7 +254,7 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
 
   if (marketplace.pricingMode === "targetMargin") {
     try {
-      netProceeds = evaluateFormula(matchedRule.formula, { ...context, price });
+      netProceeds = evaluateFormula(lastAppliedRule.formula, { ...lastStageContext, price });
       marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
     } catch {
       // если формула перестала считаться на округлённой цене — оставляем последнее известное значение
@@ -238,7 +270,8 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     price,
     netProceeds,
     marginRatio,
-    appliedRuleId: matchedRule.id,
+    appliedRuleId: lastAppliedRule.id,
+    appliedRuleIds,
     iterations,
     warnings,
   };

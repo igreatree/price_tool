@@ -37,6 +37,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
   const [conditionGroup, setConditionGroup] = useState<ConditionGroup>(rule?.conditionGroup ?? emptyConditionGroup());
   const [rawCondition, setRawCondition] = useState(rule?.rawCondition ?? "");
   const [formula, setFormula] = useState(rule?.formula ?? "");
+  const [isFinal, setIsFinal] = useState(rule?.isFinal ?? true);
   const [postScript, setPostScript] = useState(rule?.postScript ?? "");
   const [scriptOpened, setScriptOpened] = useState(!!rule?.postScript);
 
@@ -68,6 +69,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       rawCondition,
       formula: formula.trim(),
       postScript: postScript.trim() || undefined,
+      isFinal,
     };
     setSaving(true);
     try {
@@ -123,6 +125,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
         return matches.length ? Math.min(...matches.map((s) => s.price)) : 0;
       },
       expensesTotal,
+      prevPrice: 0,
       discount: marketplaceParams?.discount ?? 0,
       taxRate: marketplaceParams?.taxRate ?? 0,
       commissionRate: marketplaceParams?.commissionRate ?? 0,
@@ -168,6 +171,19 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
 
       <Switch label="Правило активно" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
 
+      <div>
+        <Switch
+          label="Финальное правило"
+          checked={isFinal}
+          onChange={(e) => setIsFinal(e.currentTarget.checked)}
+        />
+        <Text size="xs" c="dimmed" mt={4}>
+          {isFinal
+            ? "При совпадении условия это правило сразу определяет цену."
+            : "При совпадении условия расчёт не останавливается: цена этого правила передаётся дальше как prevPrice следующему подходящему правилу (по приоритету)."}
+        </Text>
+      </div>
+
       <Alert color="gray" variant="light" title="Переменные, доступные в условии и формуле">
         <Table withRowBorders={false} verticalSpacing={2} fz="xs">
           <Table.Tbody>
@@ -211,6 +227,15 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
                 <code>expensesTotal</code>
               </Table.Td>
               <Table.Td>Сумма общих расходов, применимых к товару (вкладка «Расходы»)</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>prevPrice</code>
+              </Table.Td>
+              <Table.Td>
+                Цена, посчитанная предыдущим правилом в цепочке (0, если это первое сработавшее правило). Работает только если более
+                приоритетное подошедшее правило помечено не финальным — см. переключатель «Финальное правило» ниже.
+              </Table.Td>
             </Table.Tr>
             <Table.Tr>
               <Table.Td>
@@ -262,7 +287,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
           <ConditionBuilder
             group={conditionGroup}
             onChange={setConditionGroup}
-            fieldSuggestions={["cost", "brand", "bestSupplierPrice", "expensesTotal", "discount", "taxRate", "commissionRate"]}
+            fieldSuggestions={["cost", "brand", "bestSupplierPrice", "expensesTotal", "prevPrice", "discount", "taxRate", "commissionRate"]}
           />
         ) : (
           <ExpressionInput value={rawCondition} onChange={setRawCondition} placeholder='brand == "TIGI" AND cost > 1000' />
@@ -307,6 +332,9 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       <Title order={5} mt="md">
         Проверка на товаре
       </Title>
+      <Text size="xs" c="dimmed">
+        Проверка считает только это правило изолированно: <code>prevPrice</code> здесь всегда 0, даже если правило каскадное.
+      </Text>
       <Group>
         <Select
           placeholder="Выберите товар"

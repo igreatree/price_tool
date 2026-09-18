@@ -32,11 +32,14 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
 
   const rows = useMemo<Row[]>(
     () =>
-      (calculatedPrices ?? []).map((cp) => ({
-        ...cp,
-        product: productsById.get(cp.productId),
-        ruleName: cp.appliedRuleId ? (rulesById.get(cp.appliedRuleId)?.name ?? "—") : "—",
-      })),
+      (calculatedPrices ?? []).map((cp) => {
+        const chainIds = cp.appliedRuleIds.length ? cp.appliedRuleIds : cp.appliedRuleId ? [cp.appliedRuleId] : [];
+        return {
+          ...cp,
+          product: productsById.get(cp.productId),
+          ruleName: chainIds.length ? chainIds.map((id) => rulesById.get(id)?.name ?? "—").join(" → ") : "—",
+        };
+      }),
     [calculatedPrices, productsById, rulesById],
   );
 
