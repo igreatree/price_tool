@@ -1,24 +1,23 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { RecalcService } from "../pricing/recalc.service";
 import type { CreateRuleBodyDto, ImportRuleRowDto, PatchRuleDto, UpdateRuleDto } from "./dto/rule.dto";
 
 const EMPTY_CONDITION_GROUP: Prisma.InputJsonValue = { joiner: "AND", rows: [] };
 
+/** Пересчёт цен по правилам сюда намеренно не встроен — правила можно сохранять/удалять/импортировать
+ * сколько угодно раз без дорогого пересчёта всех товаров, он запускается только явно, кнопкой
+ * «Пересчитать всё» (см. RecalculateController). */
 @Injectable()
 export class RulesService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly recalcService: RecalcService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   findByMarketplace(marketplaceId: string) {
     return this.prisma.rule.findMany({ where: { marketplaceId }, orderBy: { priority: "asc" } });
   }
 
-  async create(marketplaceId: string, dto: CreateRuleBodyDto) {
-    const record = await this.prisma.rule.create({
+  create(marketplaceId: string, dto: CreateRuleBodyDto) {
+    return this.prisma.rule.create({
       data: {
         ...dto,
         marketplaceId,
@@ -27,12 +26,10 @@ export class RulesService {
         postScript: dto.postScript?.trim() || null,
       },
     });
-    await this.recalcService.recalcMarketplace(record.marketplaceId);
-    return record;
   }
 
-  async update(id: string, dto: UpdateRuleDto) {
-    const record = await this.prisma.rule.update({
+  update(id: string, dto: UpdateRuleDto) {
+    return this.prisma.rule.update({
       where: { id },
       data: {
         ...dto,
@@ -41,19 +38,14 @@ export class RulesService {
         postScript: dto.postScript?.trim() || null,
       },
     });
-    await this.recalcService.recalcMarketplace(record.marketplaceId);
-    return record;
   }
 
-  async patch(id: string, dto: PatchRuleDto) {
-    const record = await this.prisma.rule.update({ where: { id }, data: dto });
-    await this.recalcService.recalcMarketplace(record.marketplaceId);
-    return record;
+  patch(id: string, dto: PatchRuleDto) {
+    return this.prisma.rule.update({ where: { id }, data: dto });
   }
 
   async remove(id: string) {
-    const record = await this.prisma.rule.delete({ where: { id } });
-    await this.recalcService.recalcMarketplace(record.marketplaceId);
+    await this.prisma.rule.delete({ where: { id } });
   }
 
   /** Импорт из Excel/Google Sheets — находит правило по имени (без учёта регистра) в этом маркетплейсе:
@@ -83,7 +75,6 @@ export class RulesService {
       }),
     );
 
-    await this.recalcService.recalcMarketplace(marketplaceId);
     return { imported: rows.length };
   }
 }

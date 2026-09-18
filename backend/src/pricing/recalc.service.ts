@@ -147,7 +147,7 @@ export class RecalcService {
     await Promise.all(marketplaces.map((m) => this.recalcProductForMarketplace(productId, m.id)));
   }
 
-  async recalcMarketplace(marketplaceId: string, chunkSize = 300): Promise<void> {
+  async recalcMarketplace(marketplaceId: string, chunkSize = 300): Promise<{ productsCount: number }> {
     const marketplace = await this.prisma.marketplace.findUnique({ where: { id: marketplaceId } });
     if (!marketplace) throw new NotFoundException("Маркетплейс не найден");
 
@@ -196,6 +196,8 @@ export class RecalcService {
 
       await Promise.all(results.map((r) => this.persist(r)));
     }
+
+    return { productsCount: products.length };
   }
 
   async recalcAllMarketplaces(): Promise<void> {

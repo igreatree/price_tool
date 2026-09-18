@@ -7,6 +7,7 @@ import { rulesApi } from "../../api/rules";
 import type { Marketplace, Rule } from "../../types";
 import { RuleForm } from "./RuleForm";
 import { ImportRulesModal } from "./ImportRulesModal";
+import { RecalcScheduleCard } from "./RecalcScheduleCard";
 import { conditionGroupToExpression } from "../../engine/conditionBuilder";
 import { exportRowsToExcel } from "../../utils/excel";
 import { RULE_SHEET_COLUMNS } from "./ruleSheetColumns";
@@ -25,7 +26,6 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
 
   async function invalidateAfterMutation() {
     await queryClient.invalidateQueries({ queryKey: ["rules", marketplace.id] });
-    await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
   }
 
   async function handleDelete(rule: Rule) {
@@ -33,7 +33,7 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
     setDeletingId(rule.id);
     try {
       await rulesApi.remove(rule.id);
-      notifications.show({ message: "Правило удалено. Цены пересчитаны.", color: "green" });
+      notifications.show({ message: "Правило удалено. Не забудьте нажать «Пересчитать всё», чтобы обновить цены.", color: "green" });
       await invalidateAfterMutation();
     } finally {
       setDeletingId(null);
@@ -68,7 +68,8 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
           Правила проверяются по возрастанию приоритета — применяется первое подошедшее. Если оно не финальное, расчёт продолжается со
-          следующим подходящим правилом, которому передаётся его цена.
+          следующим подходящим правилом, которому передаётся его цена. Изменения правил не пересчитывают цены автоматически — нажмите
+          «Пересчитать всё» на вкладке цен, когда закончите редактировать.
         </Text>
         <Group>
           <Button
@@ -93,6 +94,8 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
           </Button>
         </Group>
       </Group>
+
+      <RecalcScheduleCard marketplace={marketplace} />
 
       {isLoading && (
         <Center py="lg">
@@ -164,7 +167,7 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
           rule={editing}
           onSaved={async () => {
             setOpened(false);
-            notifications.show({ message: "Правило сохранено. Цены пересчитаны.", color: "green" });
+            notifications.show({ message: "Правило сохранено. Не забудьте нажать «Пересчитать всё», чтобы обновить цены.", color: "green" });
             await invalidateAfterMutation();
           }}
         />

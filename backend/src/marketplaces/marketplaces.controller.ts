@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from "@nestjs/common";
 import { MarketplacesService } from "./marketplaces.service";
-import { CreateMarketplaceDto, UpdateMarketplaceDto } from "./dto/marketplace.dto";
+import { CreateMarketplaceDto, RecalcScheduleDto, UpdateMarketplaceDto } from "./dto/marketplace.dto";
 
 @Controller("marketplaces")
 export class MarketplacesController {
@@ -24,6 +24,11 @@ export class MarketplacesController {
   @Put(":id")
   update(@Param("id") id: string, @Body() dto: UpdateMarketplaceDto) {
     return this.service.update(id, dto);
+  }
+
+  @Patch(":id/schedule")
+  updateSchedule(@Param("id") id: string, @Body() dto: RecalcScheduleDto) {
+    return this.service.updateSchedule(id, dto);
   }
 
   @Delete(":id")

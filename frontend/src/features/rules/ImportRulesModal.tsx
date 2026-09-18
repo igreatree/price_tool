@@ -53,7 +53,10 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
     setImporting(true);
     try {
       const { imported } = await rulesApi.import(marketplace.id, rows);
-      notifications.show({ message: `Импортировано правил: ${imported}. Цены пересчитаны.`, color: "green" });
+      notifications.show({
+        message: `Импортировано правил: ${imported}. Не забудьте нажать «Пересчитать всё», чтобы обновить цены.`,
+        color: "green",
+      });
       onDone();
     } finally {
       setImporting(false);

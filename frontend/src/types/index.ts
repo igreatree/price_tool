@@ -58,6 +58,18 @@ export interface SolverConfig {
   maxIterations: number;
 }
 
+export type WeekDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+export interface RecalcScheduleDay {
+  enabled: boolean;
+  /** "HH:MM", 24-часовой формат, в таймзоне сервера (SCHEDULER_TIMEZONE). */
+  time: string;
+}
+
+/** День, отсутствующий в объекте, значит выключен — так выглядит recalcSchedule маркетплейсов,
+ * ни разу не настраивавших расписание. */
+export type RecalcSchedule = Partial<Record<WeekDay, RecalcScheduleDay>>;
+
 export interface Marketplace {
   id: string;
   name: string;
@@ -68,6 +80,7 @@ export interface Marketplace {
   solver: SolverConfig;
   excludedProductIds: string[];
   exclusionCondition: string;
+  recalcSchedule: RecalcSchedule;
   createdAt: string;
 }
 

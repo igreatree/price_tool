@@ -73,6 +73,9 @@ model Marketplace {
   solver             Json
   excludedProductIds String[]    @default([])
   exclusionCondition String      @default("")
+  /** Расписание автопересчёта цен по дням недели, напр. {"mon":{"enabled":true,"time":"09:00"},...}.
+   * Дни, отсутствующие в объекте, считаются выключенными. См. RecalcSchedulerService. */
+  recalcSchedule     Json        @default("{}")
   createdAt          DateTime    @default(now())
 
   rules                    Rule[]
