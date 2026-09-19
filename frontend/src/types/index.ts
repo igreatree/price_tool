@@ -60,16 +60,6 @@ export interface SolverConfig {
 
 export type WeekDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
-export interface RecalcScheduleDay {
-  enabled: boolean;
-  /** "HH:MM", 24-часовой формат, в таймзоне сервера (SCHEDULER_TIMEZONE). */
-  time: string;
-}
-
-/** День, отсутствующий в объекте, значит выключен — так выглядит recalcSchedule маркетплейсов,
- * ни разу не настраивавших расписание. */
-export type RecalcSchedule = Partial<Record<WeekDay, RecalcScheduleDay>>;
-
 export interface Marketplace {
   id: string;
   name: string;
@@ -80,7 +70,6 @@ export interface Marketplace {
   solver: SolverConfig;
   excludedProductIds: string[];
   exclusionCondition: string;
-  recalcSchedule: RecalcSchedule;
   createdAt: string;
 }
 
@@ -101,6 +90,18 @@ export interface ConditionGroup {
 
 export type RuleConditionMode = "builder" | "raw";
 
+export type RuleScheduleAction = "enable" | "disable";
+
+export interface RuleScheduleEntry {
+  action: RuleScheduleAction;
+  /** "HH:MM", 24-часовой формат, в таймзоне сервера (SCHEDULER_TIMEZONE). */
+  time: string;
+}
+
+/** День, отсутствующий в объекте (или null), не управляется расписанием — правило переключается
+ * автоматически только в те дни, для которых явно задана запись. */
+export type RuleSchedule = Partial<Record<WeekDay, RuleScheduleEntry | null>>;
+
 export interface Rule {
   id: string;
   marketplaceId: string;
@@ -115,6 +116,7 @@ export interface Rule {
   /** Если false — при совпадении условия каскад продолжается к следующему подходящему правилу
    * (по приоритету), которому передаётся цена этого правила через переменную prevPrice. */
   isFinal: boolean;
+  schedule: RuleSchedule;
   createdAt: string;
 }
 

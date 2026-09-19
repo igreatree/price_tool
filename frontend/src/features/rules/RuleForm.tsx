@@ -7,12 +7,13 @@ import { supplierPricesApi } from "../../api/supplierPrices";
 import { marketplaceParamsApi } from "../../api/marketplaceParams";
 import { expensesApi } from "../../api/expenses";
 import { rulesApi } from "../../api/rules";
-import type { ConditionGroup, Marketplace, Rule } from "../../types";
+import type { ConditionGroup, Marketplace, Rule, RuleSchedule, RuleScheduleEntry, WeekDay } from "../../types";
 import { ConditionBuilder } from "./ConditionBuilder";
 import { ExpressionInput } from "../../components/ExpressionInput";
 import { conditionGroupToExpression, emptyConditionGroup } from "../../engine/conditionBuilder";
 import { evaluateCondition, evaluateFormula, type ExpressionContext } from "../../engine/expression";
 import { solvePrice } from "../../engine/solver";
+import { DAY_LABELS, DEFAULT_SCHEDULE_TIME, WEEK_DAYS, hasActiveSchedule } from "./ruleSchedule";
 
 interface Props {
   marketplace: Marketplace;
@@ -40,6 +41,8 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
   const [isFinal, setIsFinal] = useState(rule?.isFinal ?? true);
   const [postScript, setPostScript] = useState(rule?.postScript ?? "");
   const [scriptOpened, setScriptOpened] = useState(!!rule?.postScript);
+  const [schedule, setSchedule] = useState<RuleSchedule>(rule?.schedule ?? {});
+  const [scheduleOpened, setScheduleOpened] = useState(hasActiveSchedule(rule?.schedule ?? {}));
 
   const [previewProductId, setPreviewProductId] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
@@ -58,6 +61,18 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
 
   const conditionExpr = conditionMode === "raw" ? rawCondition : conditionGroupToExpression(conditionGroup);
 
+  function updateScheduleDay(day: WeekDay, patch: Partial<RuleScheduleEntry> | null) {
+    setSchedule((prev) => {
+      if (patch === null) {
+        const next = { ...prev };
+        delete next[day];
+        return next;
+      }
+      const current = prev[day] ?? { action: "enable" as const, time: DEFAULT_SCHEDULE_TIME };
+      return { ...prev, [day]: { ...current, ...patch } };
+    });
+  }
+
   async function handleSubmit() {
     if (!name.trim()) return;
     const input = {
@@ -70,6 +85,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       formula: formula.trim(),
       postScript: postScript.trim() || undefined,
       isFinal,
+      schedule,
     };
     setSaving(true);
     try {
@@ -325,6 +341,59 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
               <code>price</code>. Должен вернуть новое число цены.
             </Text>
             <Textarea value={postScript} onChange={(e) => setPostScript(e.currentTarget.value)} placeholder="return price * 0.99;" autosize minRows={3} />
+          </Stack>
+        </Collapse>
+      </div>
+
+      <div>
+        <Button
+          variant="subtle"
+          size="xs"
+          onClick={() => setScheduleOpened((o) => !o)}
+          rightSection={scheduleOpened ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
+        >
+          Расписание автовкл/выкл{hasActiveSchedule(schedule) ? ` (${WEEK_DAYS.filter((d) => schedule[d]).length} дн.)` : ""}
+        </Button>
+        <Collapse expanded={scheduleOpened}>
+          <Stack gap="xs" mt="xs">
+            <Text size="xs" c="dimmed">
+              В отмеченные дни правило само включится/выключится в указанное время (по часовому поясу сервера), и цены маркетплейса
+              будут пересчитаны автоматически. Ручной переключатель «Правило активно» выше при этом продолжает работать — расписание
+              просто переставит его в следующий раз.
+            </Text>
+            <Stack gap={6}>
+              {WEEK_DAYS.map((day) => {
+                const entry = schedule[day];
+                return (
+                  <Group key={day} wrap="nowrap">
+                    <Switch
+                      checked={!!entry}
+                      onChange={(e) => updateScheduleDay(day, e.currentTarget.checked ? {} : null)}
+                      label={DAY_LABELS[day]}
+                      w={90}
+                    />
+                    <Select
+                      data={[
+                        { value: "enable", label: "Включить" },
+                        { value: "disable", label: "Выключить" },
+                      ]}
+                      value={entry?.action ?? "enable"}
+                      onChange={(v) => updateScheduleDay(day, { action: (v as RuleScheduleEntry["action"]) ?? "enable" })}
+                      disabled={!entry}
+                      allowDeselect={false}
+                      w={140}
+                    />
+                    <TextInput
+                      type="time"
+                      value={entry?.time ?? DEFAULT_SCHEDULE_TIME}
+                      onChange={(e) => updateScheduleDay(day, { time: e.currentTarget.value || DEFAULT_SCHEDULE_TIME })}
+                      disabled={!entry}
+                      w={140}
+                    />
+                  </Group>
+                );
+              })}
+            </Stack>
           </Stack>
         </Collapse>
       </div>

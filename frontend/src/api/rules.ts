@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ConditionGroup, Rule, RuleConditionMode } from "../types";
+import type { ConditionGroup, Rule, RuleConditionMode, RuleSchedule } from "../types";
 
 export interface RuleInput {
   name: string;
@@ -11,6 +11,7 @@ export interface RuleInput {
   formula: string;
   postScript?: string;
   isFinal: boolean;
+  schedule?: RuleSchedule;
 }
 
 export interface RuleImportRow {

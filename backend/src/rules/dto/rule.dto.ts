@@ -7,6 +7,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   MinLength,
   ValidateNested,
 } from "class-validator";
@@ -34,6 +35,53 @@ export class ConditionGroupDto {
   @ValidateNested({ each: true })
   @Type(() => ConditionRowDto)
   rows!: ConditionRowDto[];
+}
+
+export class RuleScheduleDayDto {
+  @IsIn(["enable", "disable"])
+  action!: "enable" | "disable";
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: "time must be in HH:MM (24h) format" })
+  time!: string;
+}
+
+/** Одна (необязательная, может быть null) запись на каждый день недели — день без расписания
+ * не управляется автоматически. Frontend всегда отправляет все 7 ключей. */
+export class RuleScheduleDto {
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  mon?: RuleScheduleDayDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  tue?: RuleScheduleDayDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  wed?: RuleScheduleDayDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  thu?: RuleScheduleDayDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  fri?: RuleScheduleDayDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  sat?: RuleScheduleDayDto | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDayDto)
+  sun?: RuleScheduleDayDto | null;
 }
 
 export class CreateRuleBodyDto {
@@ -69,6 +117,12 @@ export class CreateRuleBodyDto {
    * (по приоритету), которому передаётся цена этого правила через prevPrice. */
   @IsBoolean()
   isFinal!: boolean;
+
+  /** Расписание автовкл/выкл по дням недели — см. RuleScheduleDto. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RuleScheduleDto)
+  schedule?: RuleScheduleDto;
 }
 
 export class UpdateRuleDto extends CreateRuleBodyDto {}

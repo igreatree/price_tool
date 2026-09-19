@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import type { CreateMarketplaceDto, RecalcScheduleDto, UpdateMarketplaceDto } from "./dto/marketplace.dto";
+import type { CreateMarketplaceDto, UpdateMarketplaceDto } from "./dto/marketplace.dto";
 
 @Injectable()
 export class MarketplacesService {
@@ -41,13 +41,6 @@ export class MarketplacesService {
         excludedProductIds: dto.excludedProductIds ?? [],
         exclusionCondition: dto.exclusionCondition ?? "",
       },
-    });
-  }
-
-  updateSchedule(id: string, dto: RecalcScheduleDto) {
-    return this.prisma.marketplace.update({
-      where: { id },
-      data: { recalcSchedule: dto as unknown as Prisma.InputJsonValue },
     });
   }
 

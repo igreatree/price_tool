@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, Matches, MinLength, ValidateNested } from "class-validator";
+import { IsArray, IsIn, IsNumber, IsOptional, IsString, MinLength, ValidateNested } from "class-validator";
 
 export class RoundingConfigDto {
   @IsIn(["none", "nearest", "up", "down"])
@@ -65,43 +65,3 @@ export class CreateMarketplaceDto {
 }
 
 export class UpdateMarketplaceDto extends CreateMarketplaceDto {}
-
-export class RecalcScheduleDayDto {
-  @IsBoolean()
-  enabled!: boolean;
-
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: "time must be in HH:MM (24h) format" })
-  time!: string;
-}
-
-/** Одна запись на каждый день недели — день, отсутствующий в объекте на входе, не сохраняется
- * (frontend всегда отправляет все 7), но чтения старых/дефолтных `{}` переживают отсутствие ключа. */
-export class RecalcScheduleDto {
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  mon!: RecalcScheduleDayDto;
-
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  tue!: RecalcScheduleDayDto;
-
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  wed!: RecalcScheduleDayDto;
-
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  thu!: RecalcScheduleDayDto;
-
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  fri!: RecalcScheduleDayDto;
-
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  sat!: RecalcScheduleDayDto;
-
-  @ValidateNested()
-  @Type(() => RecalcScheduleDayDto)
-  sun!: RecalcScheduleDayDto;
-}

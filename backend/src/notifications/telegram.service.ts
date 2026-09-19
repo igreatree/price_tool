@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 
 /**
- * Уведомления об автопересчёте цен по расписанию (см. RecalcSchedulerService). Настраивается
+ * Уведомления об автовкл/выкл правил по расписанию (см. RuleSchedulerService). Настраивается
  * переменными окружения TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID / TELEGRAM_TOPIC_ID — если бот не
  * настроен (нет токена/чата), сообщения просто не отправляются, без ошибок.
  */

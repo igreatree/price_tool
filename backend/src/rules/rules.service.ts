@@ -24,6 +24,8 @@ export class RulesService {
         conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue,
         rawCondition: dto.rawCondition ?? "",
         postScript: dto.postScript?.trim() || null,
+        // undefined здесь Prisma трактует как "поле не передано" — на create применится дефолт "{}"
+        schedule: dto.schedule as unknown as Prisma.InputJsonValue,
       },
     });
   }
@@ -36,6 +38,7 @@ export class RulesService {
         conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue,
         rawCondition: dto.rawCondition ?? "",
         postScript: dto.postScript?.trim() || null,
+        schedule: dto.schedule as unknown as Prisma.InputJsonValue,
       },
     });
   }

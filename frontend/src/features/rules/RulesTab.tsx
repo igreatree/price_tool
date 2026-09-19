@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ActionIcon, Badge, Button, Center, Drawer, Group, Loader, Modal, Stack, Switch, Text } from "@mantine/core";
+import { ActionIcon, Badge, Button, Center, Drawer, Group, Loader, Modal, Stack, Switch, Text, Tooltip } from "@mantine/core";
 import { IconDownload, IconPencil, IconPlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { rulesApi } from "../../api/rules";
 import type { Marketplace, Rule } from "../../types";
 import { RuleForm } from "./RuleForm";
 import { ImportRulesModal } from "./ImportRulesModal";
-import { RecalcScheduleCard } from "./RecalcScheduleCard";
 import { conditionGroupToExpression } from "../../engine/conditionBuilder";
 import { exportRowsToExcel } from "../../utils/excel";
 import { RULE_SHEET_COLUMNS } from "./ruleSheetColumns";
+import { hasActiveSchedule, scheduleSummary } from "./ruleSchedule";
 
 export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
   const queryClient = useQueryClient();
@@ -68,8 +68,9 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
           Правила проверяются по возрастанию приоритета — применяется первое подошедшее. Если оно не финальное, расчёт продолжается со
-          следующим подходящим правилом, которому передаётся его цена. Изменения правил не пересчитывают цены автоматически — нажмите
-          «Пересчитать всё» на вкладке цен, когда закончите редактировать.
+          следующим подходящим правилом, которому передаётся его цена. Ручные изменения правил не пересчитывают цены автоматически —
+          нажмите «Пересчитать всё» на вкладке цен, когда закончите редактировать. Правила с расписанием (см. форму правила) включаются и
+          выключаются сами, а цены после этого пересчитываются автоматически.
         </Text>
         <Group>
           <Button
@@ -95,8 +96,6 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
         </Group>
       </Group>
 
-      <RecalcScheduleCard marketplace={marketplace} />
-
       {isLoading && (
         <Center py="lg">
           <Loader size="sm" />
@@ -119,6 +118,13 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
                   <Badge variant="light" color="grape">
                     каскадное
                   </Badge>
+                )}
+                {hasActiveSchedule(rule.schedule) && (
+                  <Tooltip label={scheduleSummary(rule.schedule)}>
+                    <Badge variant="light" color="blue">
+                      по расписанию
+                    </Badge>
+                  </Tooltip>
                 )}
               </Group>
               <Text size="xs" c="dimmed" mt={2}>
