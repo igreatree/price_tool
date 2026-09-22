@@ -126,6 +126,11 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
                     </Badge>
                   </Tooltip>
                 )}
+                {rule.priceMode && (
+                  <Badge variant="light" color="orange">
+                    {rule.priceMode === "direct" ? "цена напрямую" : "целевая маржа"}
+                  </Badge>
+                )}
               </Group>
               <Text size="xs" c="dimmed" mt={2}>
                 {conditionGroupToExpression(rule.conditionGroup) || rule.rawCondition || "без условия (всегда)"}

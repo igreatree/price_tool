@@ -117,6 +117,8 @@ export interface Rule {
    * (по приоритету), которому передаётся цена этого правила через переменную prevPrice. */
   isFinal: boolean;
   schedule: RuleSchedule;
+  /** Переопределяет pricingMode маркетплейса для этого правила. null — наследует режим маркетплейса. */
+  priceMode: PricingMode | null;
   createdAt: string;
 }
 

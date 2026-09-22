@@ -7,7 +7,7 @@ import { supplierPricesApi } from "../../api/supplierPrices";
 import { marketplaceParamsApi } from "../../api/marketplaceParams";
 import { expensesApi } from "../../api/expenses";
 import { rulesApi } from "../../api/rules";
-import type { ConditionGroup, Marketplace, Rule, RuleSchedule, RuleScheduleEntry, WeekDay } from "../../types";
+import type { ConditionGroup, Marketplace, PricingMode, Rule, RuleSchedule, RuleScheduleEntry, WeekDay } from "../../types";
 import { ConditionBuilder } from "./ConditionBuilder";
 import { ExpressionInput } from "../../components/ExpressionInput";
 import { conditionGroupToExpression, emptyConditionGroup } from "../../engine/conditionBuilder";
@@ -39,6 +39,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
   const [rawCondition, setRawCondition] = useState(rule?.rawCondition ?? "");
   const [formula, setFormula] = useState(rule?.formula ?? "");
   const [isFinal, setIsFinal] = useState(rule?.isFinal ?? true);
+  const [priceModeOverride, setPriceModeOverride] = useState<PricingMode | null>(rule?.priceMode ?? null);
   const [postScript, setPostScript] = useState(rule?.postScript ?? "");
   const [scriptOpened, setScriptOpened] = useState(!!rule?.postScript);
   const [schedule, setSchedule] = useState<RuleSchedule>(rule?.schedule ?? {});
@@ -60,6 +61,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
   }, [products]);
 
   const conditionExpr = conditionMode === "raw" ? rawCondition : conditionGroupToExpression(conditionGroup);
+  const effectiveMode: PricingMode = priceModeOverride ?? marketplace.pricingMode;
 
   function updateScheduleDay(day: WeekDay, patch: Partial<RuleScheduleEntry> | null) {
     setSchedule((prev) => {
@@ -86,6 +88,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       postScript: postScript.trim() || undefined,
       isFinal,
       schedule,
+      priceMode: priceModeOverride,
     };
     setSaving(true);
     try {
@@ -156,7 +159,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
         setPreviewResult({ matches: false });
         return;
       }
-      if (marketplace.pricingMode === "direct") {
+      if (effectiveMode === "direct") {
         const price = evaluateFormula(formula, context);
         setPreviewResult({ matches: true, price });
       } else {
@@ -197,6 +200,24 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
           {isFinal
             ? "При совпадении условия это правило сразу определяет цену."
             : "При совпадении условия расчёт не останавливается: цена этого правила передаётся дальше как prevPrice следующему подходящему правилу (по приоритету)."}
+        </Text>
+      </div>
+
+      <div>
+        <Select
+          label="Режим цены для этого правила"
+          data={[
+            { value: "", label: `Как у маркетплейса (${marketplace.pricingMode === "direct" ? "прямая формула" : "целевая маржа"})` },
+            { value: "direct", label: "Прямая формула (формула сразу считает цену)" },
+            { value: "targetMargin", label: "Целевая маржа (формула считает выручку, цена подбирается)" },
+          ]}
+          value={priceModeOverride ?? ""}
+          onChange={(v) => setPriceModeOverride(v ? (v as PricingMode) : null)}
+          allowDeselect={false}
+        />
+        <Text size="xs" c="dimmed" mt={4}>
+          По умолчанию правило считает цену так же, как настроено для всего маркетплейса. Переопределите здесь, если именно этому
+          правилу нужно задавать цену напрямую (или наоборот — считать через целевую маржу) вне зависимости от общей настройки.
         </Text>
       </div>
 
@@ -262,7 +283,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
                 Задаются для каждого товара на вкладке маркетплейса «Параметры товаров» — не в карточке товара. По умолчанию 0.
               </Table.Td>
             </Table.Tr>
-            {marketplace.pricingMode === "targetMargin" && (
+            {effectiveMode === "targetMargin" && (
               <Table.Tr>
                 <Table.Td>
                   <code>price</code>
@@ -314,9 +335,9 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       </div>
 
       <ExpressionInput
-        label={marketplace.pricingMode === "direct" ? "Формула цены" : "Формула чистой выручки от price"}
+        label={effectiveMode === "direct" ? "Формула цены" : "Формула чистой выручки от price"}
         placeholder={
-          marketplace.pricingMode === "direct"
+          effectiveMode === "direct"
             ? "cost * 1.4"
             : "price - price*commissionRate - price*(1-discount)*taxRate - logistics - ads - otherExpenses"
         }

@@ -123,6 +123,11 @@ export class CreateRuleBodyDto {
   @ValidateNested()
   @Type(() => RuleScheduleDto)
   schedule?: RuleScheduleDto;
+
+  /** Переопределяет pricingMode маркетплейса для этого правила. null/не задано — наследует режим маркетплейса. */
+  @IsOptional()
+  @IsIn(["direct", "targetMargin"])
+  priceMode?: "direct" | "targetMargin" | null;
 }
 
 export class UpdateRuleDto extends CreateRuleBodyDto {}
@@ -163,4 +168,8 @@ export class ImportRuleRowDto {
   @IsOptional()
   @IsBoolean()
   isFinal?: boolean;
+
+  @IsOptional()
+  @IsIn(["direct", "targetMargin"])
+  priceMode?: "direct" | "targetMargin" | null;
 }

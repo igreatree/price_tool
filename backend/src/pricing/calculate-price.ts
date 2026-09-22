@@ -45,6 +45,11 @@ function getConditionExpression(rule: RuleLike): string {
   return rule.conditionMode === "raw" ? rule.rawCondition : conditionGroupToExpression(rule.conditionGroup);
 }
 
+/** Правило может переопределить режим ценообразования маркетплейса через priceMode — иначе наследует его. */
+function effectivePriceMode(rule: RuleLike, marketplace: MarketplaceLike): MarketplaceLike["pricingMode"] {
+  return rule.priceMode ?? marketplace.pricingMode;
+}
+
 function computeExpensesTotal(expenses: ExpenseLike[], product: ProductLike): number {
   return expenses
     .filter((e) => e.appliesToAll || e.productIds.includes(product.id))
@@ -186,7 +191,7 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     const stageContext: ExpressionContext = { ...context, prevPrice: price };
 
     try {
-      if (marketplace.pricingMode === "direct") {
+      if (effectivePriceMode(rule, marketplace) === "direct") {
         price = evaluateFormula(rule.formula, stageContext);
         netProceeds = price - product.cost - (context.expensesTotal as number);
         marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
@@ -252,7 +257,7 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
 
   price = applyRounding(price, marketplace.rounding);
 
-  if (marketplace.pricingMode === "targetMargin") {
+  if (effectivePriceMode(lastAppliedRule, marketplace) === "targetMargin") {
     try {
       netProceeds = evaluateFormula(lastAppliedRule.formula, { ...lastStageContext, price });
       marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;

@@ -61,6 +61,7 @@ function toRuleLike(r: Rule): RuleLike {
     formula: r.formula,
     postScript: r.postScript,
     isFinal: r.isFinal,
+    priceMode: r.priceMode,
   };
 }
 
