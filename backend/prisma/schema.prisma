@@ -12,11 +12,6 @@ enum ExpenseType {
   percent
 }
 
-enum PricingMode {
-  direct
-  targetMargin
-}
-
 enum RuleConditionMode {
   builder
   raw
@@ -38,9 +33,9 @@ model Product {
   extra      Json     @default("{}")
   updatedAt  DateTime @updatedAt
 
-  supplierPrices          SupplierPrice[]
+  supplierPrices           SupplierPrice[]
   marketplaceProductParams MarketplaceProductParams[]
-  calculatedPrices        CalculatedPrice[]
+  calculatedPrices         CalculatedPrice[]
 }
 
 model SupplierPrice {
@@ -64,16 +59,28 @@ model Expense {
 }
 
 model Marketplace {
-  id                 String      @id @default(cuid())
+  id                 String   @id @default(cuid())
   name               String
-  pricingMode        PricingMode @default(direct)
   rounding           Json
-  minPriceFormula    String      @default("")
-  maxPriceFormula    String      @default("")
-  solver             Json
-  excludedProductIds String[]    @default([])
-  exclusionCondition String      @default("")
-  createdAt          DateTime    @default(now())
+  minPriceFormula    String   @default("")
+  maxPriceFormula    String   @default("")
+  excludedProductIds String[] @default([])
+  exclusionCondition String   @default("")
+  /**
+   * JS-скрипт, вычисляющий стартовую цену товара (обязателен явный return числа). Видит базовый
+   * контекст: cost, brand, name, externalId, ...extra, bestSupplierPrice, supplierPricesCount,
+   * supplierPrice("Поставщик"), expensesTotal, а также discount/taxRate/commissionRate/logistics/
+   * ads/otherExpenses из MarketplaceProductParams. Пример:
+   * return brand.toLowerCase().includes("wella") ? supplierPrice("Поставщик1") : cost;
+   */
+  startPriceScript   String   @default("return cost;")
+  /**
+   * Основная JS-формула, вычисляющая итоговую цену из стартовой цены (startPrice) и переменных
+   * (возможно изменённых правилами в каскаде). Обязателен явный return числа. Пример:
+   * return startPrice / (1 - commissionRate) + logistics + ads + otherExpenses;
+   */
+  priceFormulaScript String   @default("return startPrice;")
+  createdAt          DateTime @default(now())
 
   rules                    Rule[]
   marketplaceProductParams MarketplaceProductParams[]
@@ -81,29 +88,37 @@ model Marketplace {
 }
 
 model Rule {
-  id            String            @id @default(cuid())
-  marketplaceId String
-  marketplace   Marketplace       @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
-  name          String
-  priority      Int               @default(0)
-  enabled       Boolean           @default(true)
-  conditionMode RuleConditionMode @default(builder)
+  id             String            @id @default(cuid())
+  marketplaceId  String
+  marketplace    Marketplace       @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  name           String
+  priority       Int               @default(0)
+  enabled        Boolean           @default(true)
+  conditionMode  RuleConditionMode @default(builder)
   conditionGroup Json
-  rawCondition  String            @default("")
-  formula       String
-  postScript    String?
-  /** Если false — при совпадении условия расчёт не останавливается на этом правиле, а продолжает
-   * искать следующее подходящее правило (по возрастанию приоритета), передавая ему цену этого
-   * правила через переменную prevPrice. Так правила можно каскадировать. */
-  isFinal       Boolean           @default(true)
-  /** Переопределяет pricingMode маркетплейса для этого правила (формула — прямая цена или чистая
-   * выручка от price). null — наследует режим маркетплейса (прежнее поведение). */
-  priceMode     PricingMode?
-  /** Расписание автовкл/выкл по дням недели, напр. {"fri":{"action":"enable","time":"18:00"},
+  rawCondition   String            @default("")
+  /**
+   * JS-скрипт действия: выполняется как набор операторов (не обёрнут в функцию с return), поэтому
+   * простое присваивание вида commissionRate = commissionRate + 0.05; изменяет переменную в общем
+   * контексте расчёта. Видит startPrice и discount/taxRate/commissionRate/logistics/ads/
+   * otherExpenses — их можно менять; можно и завести новую переменную для использования в
+   * priceFormulaScript. Локальные let/const переменными контекста не становятся.
+   */
+  actionScript   String            @default("")
+  /**
+   * Если false — при совпадении условия каскад не останавливается на этом правиле, а продолжает
+   * искать следующее подходящее правило (по возрастанию приоритета), сохраняя изменения переменных,
+   * сделанные этим правилом. Так правила можно каскадировать. Если true — это правило финализирует
+   * состояние переменных перед вычислением priceFormulaScript.
+   */
+  isFinal        Boolean           @default(true)
+  /**
+   * Расписание автовкл/выкл по дням недели, напр. {"fri":{"action":"enable","time":"18:00"},
    * "mon":{"action":"disable","time":"00:00"}}. День, отсутствующий в объекте (или null), не
-   * управляется расписанием — enabled меняется только вручную. См. RuleSchedulerService. */
-  schedule      Json              @default("{}")
-  createdAt     DateTime          @default(now())
+   * управляется расписанием — enabled меняется только вручную. См. RuleSchedulerService.
+   */
+  schedule       Json              @default("{}")
+  createdAt      DateTime          @default(now())
 
   @@index([marketplaceId])
 }
@@ -127,20 +142,21 @@ model MarketplaceProductParams {
 }
 
 model CalculatedPrice {
-  id            String      @id @default(cuid())
-  productId     String
-  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  marketplaceId String
-  marketplace   Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
-  price         Float
-  netProceeds   Float
-  marginRatio   Float
-  appliedRuleId String?
-  /** Вся цепочка применённых правил по порядку (для каскадных правил — несколько id, иначе один). */
-  appliedRuleIds String[]   @default([])
-  iterations    Int         @default(0)
-  calculatedAt  DateTime    @default(now())
-  warnings      String[]    @default([])
+  id             String      @id @default(cuid())
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplaceId  String
+  marketplace    Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  price          Float
+  netProceeds    Float
+  marginRatio    Float
+  appliedRuleId  String?
+  /**
+   * Вся цепочка применённых правил по порядку (для каскадных правил — несколько id, иначе один).
+   */
+  appliedRuleIds String[]    @default([])
+  calculatedAt   DateTime    @default(now())
+  warnings       String[]    @default([])
 
   @@unique([productId, marketplaceId])
   @@index([marketplaceId])

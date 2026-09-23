@@ -1,5 +1,4 @@
 export type ExpenseType = "fixed" | "percent";
-export type PricingMode = "direct" | "targetMargin";
 export type RuleConditionMode = "builder" | "raw";
 export type RoundingMode = "none" | "nearest" | "up" | "down";
 export type ConditionOperator = "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "notContains";
@@ -9,14 +8,6 @@ export interface RoundingConfig {
   mode: RoundingMode;
   step: number;
   forceEnding?: number | null;
-}
-
-export interface SolverConfig {
-  minX: number;
-  maxX: number;
-  searchMultiplierMin: number;
-  searchMultiplierMax: number;
-  maxIterations: number;
 }
 
 export interface ConditionRow {
@@ -68,13 +59,16 @@ export interface MarketplaceProductParamsLike {
 export interface MarketplaceLike {
   id: string;
   name: string;
-  pricingMode: PricingMode;
   rounding: RoundingConfig;
   minPriceFormula: string;
   maxPriceFormula: string;
-  solver: SolverConfig;
   excludedProductIds: string[];
   exclusionCondition: string;
+  /** JS-скрипт, вычисляющий стартовую цену товара (обязателен явный return числа). */
+  startPriceScript: string;
+  /** Основная JS-формула, вычисляющая итоговую цену из startPrice и переменных (обязателен явный
+   * return числа). */
+  priceFormulaScript: string;
 }
 
 export interface RuleLike {
@@ -86,13 +80,10 @@ export interface RuleLike {
   conditionMode: RuleConditionMode;
   conditionGroup: ConditionGroup;
   rawCondition: string;
-  formula: string;
-  postScript?: string | null;
-  /** Если false — цена этого правила передаётся дальше как prevPrice следующему подходящему правилу
-   * вместо того, чтобы сразу становиться окончательной. */
+  /** JS-скрипт действия: набор операторов, меняющих переменные контекста расчёта (например,
+   * `commissionRate = commissionRate + 0.05;`). */
+  actionScript: string;
+  /** Если false — каскад не останавливается на этом правиле: изменения переменных сохраняются и
+   * поиск продолжается со следующего подходящего правила. */
   isFinal: boolean;
-  /** Переопределяет marketplace.pricingMode для этого конкретного правила: формула правила
-   * считается либо прямой ценой ("direct"), либо чистой выручкой от price ("targetMargin"),
-   * независимо от общего режима маркетплейса. null/не задано — наследует режим маркетплейса. */
-  priceMode?: PricingMode | null;
 }

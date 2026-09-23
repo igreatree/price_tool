@@ -56,8 +56,7 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
       [RULE_SHEET_COLUMNS.priority]: rule.priority,
       [RULE_SHEET_COLUMNS.enabled]: rule.enabled,
       [RULE_SHEET_COLUMNS.condition]: conditionGroupToExpression(rule.conditionGroup) || rule.rawCondition || "",
-      [RULE_SHEET_COLUMNS.formula]: rule.formula,
-      [RULE_SHEET_COLUMNS.postScript]: rule.postScript ?? "",
+      [RULE_SHEET_COLUMNS.actionScript]: rule.actionScript,
       [RULE_SHEET_COLUMNS.isFinal]: rule.isFinal,
     }));
     exportRowsToExcel("Правила", exportRows, `${marketplace.name}_правила.xlsx`);
@@ -67,10 +66,11 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
     <Stack>
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
-          Правила проверяются по возрастанию приоритета — применяется первое подошедшее. Если оно не финальное, расчёт продолжается со
-          следующим подходящим правилом, которому передаётся его цена. Ручные изменения правил не пересчитывают цены автоматически —
-          нажмите «Пересчитать всё» на вкладке цен, когда закончите редактировать. Правила с расписанием (см. форму правила) включаются и
-          выключаются сами, а цены после этого пересчитываются автоматически.
+          Правила проверяются по возрастанию приоритета — у первого подошедшего выполняется скрипт действия, меняющий переменные
+          основной формулы маркетплейса. Если правило не финальное, каскад продолжается со следующим подходящим правилом, сохраняя эти
+          изменения. Ручные изменения правил не пересчитывают цены автоматически — нажмите «Пересчитать всё» на вкладке цен, когда
+          закончите редактировать. Правила с расписанием (см. форму правила) включаются и выключаются сами, а цены после этого
+          пересчитываются автоматически.
         </Text>
         <Group>
           <Button
@@ -125,11 +125,6 @@ export function RulesTab({ marketplace }: { marketplace: Marketplace }) {
                       по расписанию
                     </Badge>
                   </Tooltip>
-                )}
-                {rule.priceMode && (
-                  <Badge variant="light" color="orange">
-                    {rule.priceMode === "direct" ? "цена напрямую" : "целевая маржа"}
-                  </Badge>
                 )}
               </Group>
               <Text size="xs" c="dimmed" mt={2}>

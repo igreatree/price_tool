@@ -1,18 +1,19 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Badge, Button, Collapse, Group, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Textarea, Title } from "@mantine/core";
+import { Alert, Badge, Button, Collapse, Group, NumberInput, Select, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-react";
 import { productsApi } from "../../api/products";
 import { supplierPricesApi } from "../../api/supplierPrices";
 import { marketplaceParamsApi } from "../../api/marketplaceParams";
 import { expensesApi } from "../../api/expenses";
 import { rulesApi } from "../../api/rules";
-import type { ConditionGroup, Marketplace, PricingMode, Rule, RuleSchedule, RuleScheduleEntry, WeekDay } from "../../types";
+import type { ConditionGroup, Marketplace, Rule, RuleSchedule, RuleScheduleEntry, WeekDay } from "../../types";
 import { ConditionBuilder } from "./ConditionBuilder";
 import { ExpressionInput } from "../../components/ExpressionInput";
+import { ScriptInput } from "../../components/ScriptInput";
 import { conditionGroupToExpression, emptyConditionGroup } from "../../engine/conditionBuilder";
-import { evaluateCondition, evaluateFormula, type ExpressionContext } from "../../engine/expression";
-import { solvePrice } from "../../engine/solver";
+import { evaluateCondition, type ExpressionContext } from "../../engine/expression";
+import { runActionScript, runExpressionScript } from "../../engine/js-script";
 import { DAY_LABELS, DEFAULT_SCHEDULE_TIME, WEEK_DAYS, hasActiveSchedule } from "./ruleSchedule";
 
 interface Props {
@@ -21,13 +22,45 @@ interface Props {
   onSaved: () => void;
 }
 
+interface ContextDiffEntry {
+  key: string;
+  before: unknown;
+  after: unknown;
+}
+
 interface PreviewResult {
   matches: boolean;
   price?: number;
   netProceeds?: number;
   marginRatio?: number;
-  iterations?: number;
+  diff?: ContextDiffEntry[];
+  warnings?: string[];
   error?: string;
+}
+
+/** Переменные, которые скрипт действия правила не должен затирать — см. backend/src/pricing/calculate-price.ts. */
+function protectedContextKeys(extra: Record<string, string | number>): Set<string> {
+  return new Set([
+    "cost",
+    "brand",
+    "name",
+    "externalId",
+    "bestSupplierPrice",
+    "supplierPricesCount",
+    "supplierPrice",
+    "expensesTotal",
+    ...Object.keys(extra ?? {}),
+  ]);
+}
+
+function diffContext(before: ExpressionContext, after: ExpressionContext): ContextDiffEntry[] {
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const diffs: ContextDiffEntry[] = [];
+  for (const key of keys) {
+    if (typeof before[key] === "function" || typeof after[key] === "function") continue;
+    if (before[key] !== after[key]) diffs.push({ key, before: before[key], after: after[key] });
+  }
+  return diffs;
 }
 
 export function RuleForm({ marketplace, rule, onSaved }: Props) {
@@ -37,11 +70,8 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
   const [conditionMode, setConditionMode] = useState<Rule["conditionMode"]>(rule?.conditionMode ?? "builder");
   const [conditionGroup, setConditionGroup] = useState<ConditionGroup>(rule?.conditionGroup ?? emptyConditionGroup());
   const [rawCondition, setRawCondition] = useState(rule?.rawCondition ?? "");
-  const [formula, setFormula] = useState(rule?.formula ?? "");
+  const [actionScript, setActionScript] = useState(rule?.actionScript ?? "");
   const [isFinal, setIsFinal] = useState(rule?.isFinal ?? true);
-  const [priceModeOverride, setPriceModeOverride] = useState<PricingMode | null>(rule?.priceMode ?? null);
-  const [postScript, setPostScript] = useState(rule?.postScript ?? "");
-  const [scriptOpened, setScriptOpened] = useState(!!rule?.postScript);
   const [schedule, setSchedule] = useState<RuleSchedule>(rule?.schedule ?? {});
   const [scheduleOpened, setScheduleOpened] = useState(hasActiveSchedule(rule?.schedule ?? {}));
 
@@ -59,9 +89,6 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
     }
     return Array.from(keys).sort();
   }, [products]);
-
-  const conditionExpr = conditionMode === "raw" ? rawCondition : conditionGroupToExpression(conditionGroup);
-  const effectiveMode: PricingMode = priceModeOverride ?? marketplace.pricingMode;
 
   function updateScheduleDay(day: WeekDay, patch: Partial<RuleScheduleEntry> | null) {
     setSchedule((prev) => {
@@ -84,11 +111,9 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       conditionMode,
       conditionGroup,
       rawCondition,
-      formula: formula.trim(),
-      postScript: postScript.trim() || undefined,
+      actionScript: actionScript.trim(),
       isFinal,
       schedule,
-      priceMode: priceModeOverride,
     };
     setSaving(true);
     try {
@@ -113,13 +138,22 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
     }
   }
 
+  /**
+   * В отличие от старого превью (которое проверяло правило изолированно), теперь нужен весь каскад:
+   * правило больше не считает цену само — оно лишь меняет переменные основной формулы маркетплейса.
+   * Поэтому подставляем текущий черновик на его место среди остальных сохранённых правил и прогоняем
+   * тот же алгоритм, что и на сервере (backend/src/pricing/calculate-price.ts): startPriceScript →
+   * каскад правил по приоритету → priceFormulaScript. Мин/макс цену и округление превью не применяет.
+   */
   async function runPreview() {
     if (!previewProductId) return;
-    const [product, supplierPrices, marketplaceParamsList, expenses] = await Promise.all([
+    const warnings: string[] = [];
+    const [product, supplierPrices, marketplaceParamsList, expenses, savedRules] = await Promise.all([
       productsApi.get(previewProductId),
       supplierPricesApi.list(),
       marketplaceParamsApi.listByMarketplace(marketplace.id),
       expensesApi.list(),
+      rulesApi.listByMarketplace(marketplace.id),
     ]);
 
     const productSupplierPrices = supplierPrices.filter((s) => s.productId === previewProductId);
@@ -130,7 +164,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       .filter((e) => e.appliesToAll || e.productIds.includes(product.id))
       .reduce((sum, e) => sum + (e.type === "fixed" ? e.value : (e.value / 100) * product.cost), 0);
 
-    const context: ExpressionContext = {
+    const baseContext: ExpressionContext = {
       cost: product.cost,
       brand: product.brand,
       name: product.name,
@@ -144,7 +178,6 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
         return matches.length ? Math.min(...matches.map((s) => s.price)) : 0;
       },
       expensesTotal,
-      prevPrice: 0,
       discount: marketplaceParams?.discount ?? 0,
       taxRate: marketplaceParams?.taxRate ?? 0,
       commissionRate: marketplaceParams?.commissionRate ?? 0,
@@ -153,32 +186,79 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       otherExpenses: marketplaceParams?.otherExpenses ?? 0,
     };
 
-    try {
-      const matches = evaluateCondition(conditionExpr, context);
-      if (!matches) {
-        setPreviewResult({ matches: false });
-        return;
+    const draftId = rule?.id ?? "__draft__";
+    const draftRule: Rule = {
+      id: draftId,
+      marketplaceId: marketplace.id,
+      name: name.trim() || "(без имени)",
+      priority: Number(priority) || 0,
+      enabled,
+      conditionMode,
+      conditionGroup,
+      rawCondition,
+      actionScript,
+      isFinal,
+      schedule: rule?.schedule ?? {},
+      createdAt: rule?.createdAt ?? new Date().toISOString(),
+    };
+    const activeRules = [...savedRules.filter((r) => r.id !== draftId), draftRule]
+      .filter((r) => r.enabled)
+      .sort((a, b) => a.priority - b.priority);
+
+    const protectedKeys = protectedContextKeys(product.extra);
+    const startPrice = runExpressionScript(marketplace.startPriceScript, baseContext, product.cost, "Начальная цена", warnings);
+    let context: ExpressionContext = { ...baseContext, startPrice };
+
+    let matchedThisRule = false;
+    let diff: ContextDiffEntry[] = [];
+    let searchFrom = 0;
+
+    for (;;) {
+      const matchIndex = activeRules.findIndex((r, idx) => {
+        if (idx < searchFrom) return false;
+        const expr = r.conditionMode === "raw" ? r.rawCondition : conditionGroupToExpression(r.conditionGroup);
+        try {
+          return evaluateCondition(expr, context);
+        } catch {
+          return false;
+        }
+      });
+      if (matchIndex === -1) break;
+
+      const matchedRule = activeRules[matchIndex];
+      const before = context;
+      context = runActionScript(matchedRule.actionScript, context, protectedKeys, matchedRule.name, warnings);
+      if (matchedRule.id === draftId) {
+        matchedThisRule = true;
+        diff = diffContext(before, context);
       }
-      if (effectiveMode === "direct") {
-        const price = evaluateFormula(formula, context);
-        setPreviewResult({ matches: true, price });
-      } else {
-        const solved = solvePrice(
-          (candidatePrice) => evaluateFormula(formula, { ...context, price: candidatePrice }),
-          product.cost,
-          marketplace.solver,
-        );
-        setPreviewResult({
-          matches: true,
-          price: solved.price,
-          netProceeds: solved.netProceeds,
-          marginRatio: solved.marginRatio,
-          iterations: solved.iterations,
-        });
-      }
-    } catch (e) {
-      setPreviewResult({ matches: false, error: e instanceof Error ? e.message : String(e) });
+      if (matchedRule.isFinal) break;
+      searchFrom = matchIndex + 1;
     }
+
+    if (!matchedThisRule) {
+      setPreviewResult({ matches: false, warnings: warnings.length ? warnings : undefined });
+      return;
+    }
+
+    const finalStartPrice = Number(context.startPrice);
+    const price = runExpressionScript(
+      marketplace.priceFormulaScript,
+      context,
+      Number.isFinite(finalStartPrice) ? finalStartPrice : startPrice,
+      "Основная формула",
+      warnings,
+    );
+    const commissionRate = Number(context.commissionRate) || 0;
+    const discount = Number(context.discount) || 0;
+    const taxRate = Number(context.taxRate) || 0;
+    const logistics = Number(context.logistics) || 0;
+    const ads = Number(context.ads) || 0;
+    const otherExpenses = Number(context.otherExpenses) || 0;
+    const netProceeds = price - price * commissionRate - price * (1 - discount) * taxRate - logistics - ads - otherExpenses;
+    const marginRatio = price !== 0 ? netProceeds / price : 0;
+
+    setPreviewResult({ matches: true, price, netProceeds, marginRatio, diff, warnings: warnings.length ? warnings : undefined });
   }
 
   return (
@@ -191,37 +271,15 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       <Switch label="Правило активно" checked={enabled} onChange={(e) => setEnabled(e.currentTarget.checked)} />
 
       <div>
-        <Switch
-          label="Финальное правило"
-          checked={isFinal}
-          onChange={(e) => setIsFinal(e.currentTarget.checked)}
-        />
+        <Switch label="Финальное правило" checked={isFinal} onChange={(e) => setIsFinal(e.currentTarget.checked)} />
         <Text size="xs" c="dimmed" mt={4}>
           {isFinal
-            ? "При совпадении условия это правило сразу определяет цену."
-            : "При совпадении условия расчёт не останавливается: цена этого правила передаётся дальше как prevPrice следующему подходящему правилу (по приоритету)."}
+            ? "При совпадении условия каскад останавливается на этом правиле — текущее состояние переменных идёт в основную формулу маркетплейса."
+            : "При совпадении условия каскад не останавливается: изменения переменных, сделанные этим правилом, сохраняются, и поиск продолжается со следующего подходящего правила (по приоритету)."}
         </Text>
       </div>
 
-      <div>
-        <Select
-          label="Режим цены для этого правила"
-          data={[
-            { value: "", label: `Как у маркетплейса (${marketplace.pricingMode === "direct" ? "прямая формула" : "целевая маржа"})` },
-            { value: "direct", label: "Прямая формула (формула сразу считает цену)" },
-            { value: "targetMargin", label: "Целевая маржа (формула считает выручку, цена подбирается)" },
-          ]}
-          value={priceModeOverride ?? ""}
-          onChange={(v) => setPriceModeOverride(v ? (v as PricingMode) : null)}
-          allowDeselect={false}
-        />
-        <Text size="xs" c="dimmed" mt={4}>
-          По умолчанию правило считает цену так же, как настроено для всего маркетплейса. Переопределите здесь, если именно этому
-          правилу нужно задавать цену напрямую (или наоборот — считать через целевую маржу) вне зависимости от общей настройки.
-        </Text>
-      </div>
-
-      <Alert color="gray" variant="light" title="Переменные, доступные в условии и формуле">
+      <Alert color="gray" variant="light" title="Переменные, доступные в условии и скрипте действия">
         <Table withRowBorders={false} verticalSpacing={2} fz="xs">
           <Table.Tbody>
             <Table.Tr>
@@ -254,9 +312,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
               </Table.Td>
               <Table.Td>
                 Цена конкретного поставщика по имени (как оно указано в «Цены поставщиков»), без учёта регистра. 0, если у товара нет цены от
-                такого поставщика — например, условие <code>supplierPrice("Ozon Wholesale") &gt; 0</code> сработает только если у товара есть
-                цена именно от этого поставщика, а формула может использовать <code>supplierPrice("Ozon Wholesale") * 1.3</code> вместо{" "}
-                <code>bestSupplierPrice</code>.
+                такого поставщика.
               </Table.Td>
             </Table.Tr>
             <Table.Tr>
@@ -267,11 +323,11 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
             </Table.Tr>
             <Table.Tr>
               <Table.Td>
-                <code>prevPrice</code>
+                <code>startPrice</code>
               </Table.Td>
               <Table.Td>
-                Цена, посчитанная предыдущим правилом в цепочке (0, если это первое сработавшее правило). Работает только если более
-                приоритетное подошедшее правило помечено не финальным — см. переключатель «Финальное правило» ниже.
+                Стартовая цена, вычисленная скриптом «Стартовая цена» в настройках маркетплейса (или уже изменённая более приоритетными
+                правилами каскада). Можно менять и здесь.
               </Table.Td>
             </Table.Tr>
             <Table.Tr>
@@ -280,20 +336,10 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
                 <code>otherExpenses</code>
               </Table.Td>
               <Table.Td>
-                Задаются для каждого товара на вкладке маркетплейса «Параметры товаров» — не в карточке товара. По умолчанию 0.
+                Базовые значения задаются для каждого товара на вкладке маркетплейса «Параметры товаров» (по умолчанию 0). Это переменные —
+                скрипт действия этого правила может их менять (см. ниже).
               </Table.Td>
             </Table.Tr>
-            {effectiveMode === "targetMargin" && (
-              <Table.Tr>
-                <Table.Td>
-                  <code>price</code>
-                </Table.Td>
-                <Table.Td>
-                  Только в формуле чистой выручки: цена, которую подбирает решатель. Формула описывает выручку <em>как функцию от price</em>, а
-                  не саму цену.
-                </Table.Td>
-              </Table.Tr>
-            )}
             {extraKeys.length > 0 && (
               <Table.Tr>
                 <Table.Td>
@@ -301,7 +347,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
                     <code key={k}>{k} </code>
                   ))}
                 </Table.Td>
-                <Table.Td>Ваши «Дополнительные параметры» из карточек товаров (используются в условиях/формулах как есть)</Table.Td>
+                <Table.Td>Ваши «Дополнительные параметры» из карточек товаров (используются в условии как есть)</Table.Td>
               </Table.Tr>
             )}
           </Table.Tbody>
@@ -324,7 +370,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
           <ConditionBuilder
             group={conditionGroup}
             onChange={setConditionGroup}
-            fieldSuggestions={["cost", "brand", "bestSupplierPrice", "expensesTotal", "prevPrice", "discount", "taxRate", "commissionRate"]}
+            fieldSuggestions={["cost", "brand", "bestSupplierPrice", "expensesTotal", "startPrice", "discount", "taxRate", "commissionRate"]}
           />
         ) : (
           <ExpressionInput value={rawCondition} onChange={setRawCondition} placeholder='brand == "TIGI" AND cost > 1000' />
@@ -334,36 +380,18 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
         </Text>
       </div>
 
-      <ExpressionInput
-        label={effectiveMode === "direct" ? "Формула цены" : "Формула чистой выручки от price"}
-        placeholder={
-          effectiveMode === "direct"
-            ? "cost * 1.4"
-            : "price - price*commissionRate - price*(1-discount)*taxRate - logistics - ads - otherExpenses"
-        }
-        value={formula}
-        onChange={setFormula}
-        required
-      />
-
       <div>
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={() => setScriptOpened((o) => !o)}
-          rightSection={scriptOpened ? <IconChevronUp size={14} /> : <IconChevronDown size={14} />}
-        >
-          Продвинутое: пользовательский скрипт (JS)
-        </Button>
-        <Collapse expanded={scriptOpened}>
-          <Stack gap="xs" mt="xs">
-            <Text size="xs" c="dimmed">
-              Выполняется после формулы, до проверки мин/макс цены. Доступны переменные <code>ctx</code> (контекст товара) и{" "}
-              <code>price</code>. Должен вернуть новое число цены.
-            </Text>
-            <Textarea value={postScript} onChange={(e) => setPostScript(e.currentTarget.value)} placeholder="return price * 0.99;" autosize minRows={3} />
-          </Stack>
-        </Collapse>
+        <Text size="sm" fw={500} mb={4}>
+          Скрипт действия (JS)
+        </Text>
+        <Text size="xs" c="dimmed" mb="xs">
+          Выполняется при совпадении условия — обычный код на JS, а не выражение. Присваивание вида{" "}
+          <code>commissionRate = commissionRate + 0.05;</code> меняет переменную для всех последующих правил каскада и основной формулы
+          маркетплейса. <code>discount</code>/<code>taxRate</code>/<code>commissionRate</code> — доли от 1 (0.5 = 50%), поэтому «+5
+          процентных пунктов к комиссии» — это <code>commissionRate = commissionRate + 0.05;</code>, а не <code>+ 5</code>. Локальные{" "}
+          <code>let</code>/<code>const</code> переменными расчёта не становятся.
+        </Text>
+        <ScriptInput value={actionScript} onChange={setActionScript} placeholder="commissionRate = commissionRate + 0.05;" />
       </div>
 
       <div>
@@ -423,7 +451,8 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
         Проверка на товаре
       </Title>
       <Text size="xs" c="dimmed">
-        Проверка считает только это правило изолированно: <code>prevPrice</code> здесь всегда 0, даже если правило каскадное.
+        Проверка подставляет этот черновик правила на его место среди остальных сохранённых правил маркетплейса и считает весь каскад
+        (стартовая цена → правила по приоритету → основная формула), как на сервере — без округления и мин/макс цены.
       </Text>
       <Group>
         <Select
@@ -444,15 +473,37 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
           {previewResult.error ? (
             `Ошибка: ${previewResult.error}`
           ) : !previewResult.matches ? (
-            "Условие не выполняется для этого товара"
+            "Правило не сработало для этого товара (условие не выполнилось, или каскад остановился на более приоритетном финальном правиле раньше)"
           ) : (
-            <Group gap="md">
-              <Badge color="indigo">Цена: {previewResult.price?.toLocaleString("ru-RU")}</Badge>
-              {previewResult.netProceeds !== undefined && <Badge color="teal">Выручка: {previewResult.netProceeds.toFixed(2)}</Badge>}
-              {previewResult.marginRatio !== undefined && <Badge color="grape">X: {previewResult.marginRatio.toFixed(3)}</Badge>}
-              {previewResult.iterations !== undefined && <Badge color="gray">Итераций: {previewResult.iterations}</Badge>}
-            </Group>
+            <Stack gap="xs">
+              <Group gap="md">
+                <Badge color="indigo">Итоговая цена: {previewResult.price?.toLocaleString("ru-RU")}</Badge>
+                {previewResult.netProceeds !== undefined && <Badge color="teal">Выручка: {previewResult.netProceeds.toFixed(2)}</Badge>}
+                {previewResult.marginRatio !== undefined && <Badge color="grape">Маржа: {(previewResult.marginRatio * 100).toFixed(1)}%</Badge>}
+              </Group>
+              {previewResult.diff && previewResult.diff.length > 0 && (
+                <Table withRowBorders={false} verticalSpacing={2} fz="xs">
+                  <Table.Tbody>
+                    {previewResult.diff.map((d) => (
+                      <Table.Tr key={d.key}>
+                        <Table.Td w={140}>
+                          <code>{d.key}</code>
+                        </Table.Td>
+                        <Table.Td>
+                          {String(d.before)} → {String(d.after)}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+            </Stack>
           )}
+          {previewResult.warnings?.map((w) => (
+            <Text key={w} size="xs" c="orange" mt={4}>
+              {w}
+            </Text>
+          ))}
         </Alert>
       )}
 

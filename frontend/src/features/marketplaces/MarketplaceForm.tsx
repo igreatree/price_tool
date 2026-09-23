@@ -1,29 +1,31 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, Group, MultiSelect, NumberInput, SegmentedControl, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, MultiSelect, NumberInput, Select, Stack, Table, Text, TextInput } from "@mantine/core";
 import { marketplacesApi } from "../../api/marketplaces";
 import { productsApi } from "../../api/products";
 import { ExpressionInput } from "../../components/ExpressionInput";
-import type { Marketplace, RoundingMode, SolverConfig } from "../../types";
+import { ScriptInput } from "../../components/ScriptInput";
+import type { Marketplace, RoundingMode } from "../../types";
 
 interface Props {
   marketplace: Marketplace | null;
   onSaved: () => void;
 }
 
-const DEFAULT_SOLVER: SolverConfig = { minX: 1.2, maxX: 1.3, searchMultiplierMin: 0.5, searchMultiplierMax: 10, maxIterations: 200 };
+const DEFAULT_START_PRICE_SCRIPT = "return cost;";
+const DEFAULT_PRICE_FORMULA_SCRIPT = "return startPrice;";
 
 export function MarketplaceForm({ marketplace, onSaved }: Props) {
   const [name, setName] = useState(marketplace?.name ?? "");
-  const [pricingMode, setPricingMode] = useState<Marketplace["pricingMode"]>(marketplace?.pricingMode ?? "direct");
   const [roundingMode, setRoundingMode] = useState<RoundingMode>(marketplace?.rounding.mode ?? "nearest");
   const [roundingStep, setRoundingStep] = useState<number | string>(marketplace?.rounding.step ?? 1);
   const [forceEnding, setForceEnding] = useState<number | string>(marketplace?.rounding.forceEnding ?? "");
   const [minPriceFormula, setMinPriceFormula] = useState(marketplace?.minPriceFormula ?? "");
   const [maxPriceFormula, setMaxPriceFormula] = useState(marketplace?.maxPriceFormula ?? "");
-  const [solver, setSolver] = useState<SolverConfig>(marketplace?.solver ?? DEFAULT_SOLVER);
   const [excludedProductIds, setExcludedProductIds] = useState<string[]>(marketplace?.excludedProductIds ?? []);
   const [exclusionCondition, setExclusionCondition] = useState(marketplace?.exclusionCondition ?? "");
+  const [startPriceScript, setStartPriceScript] = useState(marketplace?.startPriceScript ?? DEFAULT_START_PRICE_SCRIPT);
+  const [priceFormulaScript, setPriceFormulaScript] = useState(marketplace?.priceFormulaScript ?? DEFAULT_PRICE_FORMULA_SCRIPT);
   const [saving, setSaving] = useState(false);
 
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
@@ -33,7 +35,6 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
     if (!name.trim()) return;
     const input = {
       name: name.trim(),
-      pricingMode,
       rounding: {
         mode: roundingMode,
         step: Number(roundingStep) || 1,
@@ -41,9 +42,10 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
       },
       minPriceFormula: minPriceFormula.trim(),
       maxPriceFormula: maxPriceFormula.trim(),
-      solver,
       excludedProductIds,
       exclusionCondition: exclusionCondition.trim(),
+      startPriceScript: startPriceScript.trim() || DEFAULT_START_PRICE_SCRIPT,
+      priceFormulaScript: priceFormulaScript.trim() || DEFAULT_PRICE_FORMULA_SCRIPT,
     };
     setSaving(true);
     try {
@@ -68,24 +70,75 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
         placeholder="Ozon, Wildberries, Яндекс Маркет, bagini.shop..."
       />
 
+      <Alert color="gray" variant="light" title="Переменные, доступные в скриптах">
+        <Table withRowBorders={false} verticalSpacing={2} fz="xs">
+          <Table.Tbody>
+            <Table.Tr>
+              <Table.Td w={160}>
+                <code>cost</code>, <code>brand</code>, <code>name</code>, <code>externalId</code>
+              </Table.Td>
+              <Table.Td>Себестоимость, бренд, название и ID товара, плюс любые «Дополнительные параметры» из карточки товара</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>bestSupplierPrice</code>, <code>supplierPricesCount</code>, <code>supplierPrice("Имя")</code>
+              </Table.Td>
+              <Table.Td>Минимальная цена поставщика, число цен поставщиков, цена конкретного поставщика по имени</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>expensesTotal</code>
+              </Table.Td>
+              <Table.Td>Сумма общих расходов, применимых к товару (вкладка «Расходы»)</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>discount</code>, <code>taxRate</code>, <code>commissionRate</code>, <code>logistics</code>, <code>ads</code>,{" "}
+                <code>otherExpenses</code>
+              </Table.Td>
+              <Table.Td>
+                Базовые значения с вкладки маркетплейса «Параметры товаров» (доли от 1, по умолчанию 0) — правила могут менять их
+                каскадно перед вычислением основной формулы.
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>startPrice</code>
+              </Table.Td>
+              <Table.Td>Только в основной формуле — результат скрипта «Стартовая цена» (или изменённый правилами)</Table.Td>
+            </Table.Tr>
+          </Table.Tbody>
+        </Table>
+      </Alert>
+
       <div>
         <Text size="sm" fw={500} mb={4}>
-          Режим ценообразования
+          Стартовая цена (JS)
         </Text>
-        <SegmentedControl
-          fullWidth
-          value={pricingMode}
-          onChange={(v) => setPricingMode(v as Marketplace["pricingMode"])}
-          data={[
-            { label: "Прямая формула", value: "direct" },
-            { label: "Целевая маржа (подбор цены)", value: "targetMargin" },
-          ]}
+        <Text size="xs" c="dimmed" mb="xs">
+          Обязателен явный <code>return</code> числа. Определяет, с какой цены начинается расчёт — например, выбор конкретного
+          поставщика по бренду.
+        </Text>
+        <ScriptInput
+          value={startPriceScript}
+          onChange={setStartPriceScript}
+          placeholder={'return brand.toLowerCase().includes("wella") ? supplierPrice("Поставщик1") : cost;'}
         />
-        <Text size="xs" c="dimmed" mt={4}>
-          {pricingMode === "direct"
-            ? "Формула правила сразу вычисляет цену, например cost * 1.4."
-            : "Формула правила описывает чистую выручку как функцию от price; цена подбирается так, чтобы отношение выручка/себестоимость попало в диапазон Мин.X–Макс.X."}
+      </div>
+
+      <div>
+        <Text size="sm" fw={500} mb={4}>
+          Основная формула (JS)
         </Text>
+        <Text size="xs" c="dimmed" mb="xs">
+          Обязателен явный <code>return</code> числа. Вычисляет итоговую цену из <code>startPrice</code> и переменных — после того,
+          как их, возможно, изменили каскадные правила.
+        </Text>
+        <ScriptInput
+          value={priceFormulaScript}
+          onChange={setPriceFormulaScript}
+          placeholder="return startPrice / (1 - commissionRate) + logistics + ads + otherExpenses;"
+        />
       </div>
 
       <Group grow align="flex-start">
@@ -139,50 +192,6 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
           />
         </Stack>
       </div>
-
-      {pricingMode === "targetMargin" && (
-        <>
-          <Text size="sm" fw={500}>
-            Параметры подбора цены (аналог листа «Настройки»)
-          </Text>
-          <Group grow>
-            <NumberInput
-              label="Мин. X"
-              decimalScale={3}
-              step={0.01}
-              value={solver.minX}
-              onChange={(v) => setSolver((s) => ({ ...s, minX: Number(v) || 0 }))}
-            />
-            <NumberInput
-              label="Макс. X"
-              decimalScale={3}
-              step={0.01}
-              value={solver.maxX}
-              onChange={(v) => setSolver((s) => ({ ...s, maxX: Number(v) || 0 }))}
-            />
-          </Group>
-          <Group grow>
-            <NumberInput
-              label="Мин. множитель поиска (× себестоимость)"
-              decimalScale={2}
-              value={solver.searchMultiplierMin}
-              onChange={(v) => setSolver((s) => ({ ...s, searchMultiplierMin: Number(v) || 0 }))}
-            />
-            <NumberInput
-              label="Макс. множитель поиска (× себестоимость)"
-              decimalScale={2}
-              value={solver.searchMultiplierMax}
-              onChange={(v) => setSolver((s) => ({ ...s, searchMultiplierMax: Number(v) || 0 }))}
-            />
-          </Group>
-          <NumberInput
-            label="Макс. итераций"
-            min={1}
-            value={solver.maxIterations}
-            onChange={(v) => setSolver((s) => ({ ...s, maxIterations: Number(v) || 1 }))}
-          />
-        </>
-      )}
 
       <Group justify="flex-end" mt="md">
         <Button onClick={handleSubmit} loading={saving}>

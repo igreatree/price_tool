@@ -1,4 +1,3 @@
-import vm from "node:vm";
 import type {
   ProductLike,
   SupplierPriceLike,
@@ -9,7 +8,7 @@ import type {
 } from "./types";
 import { evaluateCondition, evaluateFormula, type ExpressionContext } from "./expression";
 import { conditionGroupToExpression } from "./condition-builder";
-import { solvePrice } from "./solver";
+import { runExpressionScript, runActionScript } from "./js-script";
 import { applyRounding } from "./rounding";
 
 export interface CalculatePriceInput {
@@ -32,7 +31,6 @@ export interface CalculatePriceResult {
   /** Вся цепочка применённых правил по порядку — длиннее одного элемента только при каскадных
    * (не финальных) правилах. */
   appliedRuleIds: string[];
-  iterations: number;
   warnings: string[];
   /** Товар исключён из автоперерасчёта для этого маркетплейса — вызывающая сторона (RecalcService)
    * не должна перезаписывать price/netProceeds/marginRatio существующей записи, только warnings. */
@@ -45,11 +43,6 @@ function getConditionExpression(rule: RuleLike): string {
   return rule.conditionMode === "raw" ? rule.rawCondition : conditionGroupToExpression(rule.conditionGroup);
 }
 
-/** Правило может переопределить режим ценообразования маркетплейса через priceMode — иначе наследует его. */
-function effectivePriceMode(rule: RuleLike, marketplace: MarketplaceLike): MarketplaceLike["pricingMode"] {
-  return rule.priceMode ?? marketplace.pricingMode;
-}
-
 function computeExpensesTotal(expenses: ExpenseLike[], product: ProductLike): number {
   return expenses
     .filter((e) => e.appliesToAll || e.productIds.includes(product.id))
@@ -57,10 +50,10 @@ function computeExpensesTotal(expenses: ExpenseLike[], product: ProductLike): nu
 }
 
 /**
- * Позволяет в условии/формуле правила сослаться на цену конкретного поставщика по имени,
- * а не только на bestSupplierPrice (минимум по всем). Сравнение без учёта регистра/пробелов;
- * если у товара несколько записей от одного поставщика — берётся минимальная; если поставщика
- * с таким именем нет — 0 (как и остальные отсутствующие числовые переменные контекста).
+ * Позволяет в условии/скрипте правила или маркетплейса сослаться на цену конкретного поставщика
+ * по имени, а не только на bestSupplierPrice (минимум по всем). Сравнение без учёта регистра/
+ * пробелов; если у товара несколько записей от одного поставщика — берётся минимальная; если
+ * поставщика с таким именем нет — 0 (как и остальные отсутствующие числовые переменные контекста).
  */
 function makeSupplierPriceLookup(supplierPrices: SupplierPriceLike[]): (supplierName: string) => number {
   return (supplierName: string) => {
@@ -94,24 +87,23 @@ function buildContext(input: CalculatePriceInput): ExpressionContext {
 }
 
 /**
- * postScript — пользовательский JS, сохранённый вместе с правилом самим авторизованным
- * пользователем приложения (тот же уровень доверия, что и раньше выполнялся на клиенте
- * через new Function). Изолируем через vm с коротким таймаутом и без доступа к Node-глобалам.
+ * Переменные, которые скрипт действия правила не должен затирать — это идентичность товара и
+ * рассчитанные из него агрегаты, а не переменные формулы цены. Всё остальное в контексте
+ * (discount/taxRate/commissionRate/logistics/ads/otherExpenses/startPrice и любые переменные,
+ * заведённые предыдущими правилами) правила менять могут.
  */
-function applyPostScript(script: string | null | undefined, context: ExpressionContext, price: number, warnings: string[]): number {
-  if (!script || !script.trim()) return price;
-  try {
-    const sandbox = vm.createContext({ ctx: { ...context }, price, __result__: undefined });
-    vm.runInContext(`__result__ = (function(ctx, price) { ${script} })(ctx, price);`, sandbox, { timeout: 100 });
-    const result = (sandbox as { __result__?: unknown }).__result__;
-    const num = Number(result);
-    if (Number.isFinite(num)) return num;
-    warnings.push("Скрипт вернул не число — результат проигнорирован");
-    return price;
-  } catch (e) {
-    warnings.push(`Ошибка в скрипте: ${e instanceof Error ? e.message : String(e)}`);
-    return price;
-  }
+function protectedContextKeys(product: ProductLike): Set<string> {
+  return new Set([
+    "cost",
+    "brand",
+    "name",
+    "externalId",
+    "bestSupplierPrice",
+    "supplierPricesCount",
+    "supplierPrice",
+    "expensesTotal",
+    ...Object.keys(product.extra ?? {}),
+  ]);
 }
 
 const emptyResult = (productId: string, marketplaceId: string, warnings: string[]): CalculatePriceResult => ({
@@ -122,7 +114,6 @@ const emptyResult = (productId: string, marketplaceId: string, warnings: string[
   marginRatio: 0,
   appliedRuleId: null,
   appliedRuleIds: [],
-  iterations: 0,
   warnings,
 });
 
@@ -138,14 +129,28 @@ function isProductExcluded(input: CalculatePriceInput, context: ExpressionContex
   }
 }
 
-/** Реализует 14-шаговый алгоритм расчёта цены для одной пары (товар, маркетплейс). */
+/**
+ * Расчёт цены для одной пары (товар, маркетплейс):
+ * 1. Строим базовый контекст (идентичность товара + переменные из MarketplaceProductParams).
+ * 2. Проверяем исключение — если товар исключён, цену не трогаем.
+ * 3. Себестоимость должна быть больше нуля.
+ * 4. marketplace.startPriceScript вычисляет стартовую цену (startPrice) от базового контекста.
+ * 5. Каскад правил по возрастанию приоритета: у каждого подошедшего правила выполняется
+ *    actionScript, который может изменить переменные (включая startPrice) или завести новые.
+ *    Немаксимальное (isFinal === false) правило не останавливает каскад — поиск продолжается со
+ *    следующей позиции по накопленному контексту. isFinal === true — каскад останавливается.
+ * 6. marketplace.priceFormulaScript вычисляет итоговую цену от startPrice и финального состояния
+ *    переменных.
+ * 7. Применяются ограничения min/max цены и округление.
+ * 8. netProceeds/marginRatio считаются по финальным переменным — для отчётности.
+ */
 export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult {
   const { product, marketplace, rules } = input;
   const warnings: string[] = [];
 
-  const context = buildContext(input);
+  const baseContext = buildContext(input);
 
-  if (isProductExcluded(input, context)) {
+  if (isProductExcluded(input, baseContext)) {
     return { ...emptyResult(product.id, marketplace.id, [EXCLUDED_WARNING]), excluded: true };
   }
 
@@ -154,24 +159,22 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     return emptyResult(product.id, marketplace.id, warnings);
   }
 
+  const startPrice = runExpressionScript(
+    marketplace.startPriceScript,
+    baseContext,
+    product.cost,
+    "Начальная цена",
+    warnings,
+  );
+
+  let context: ExpressionContext = { ...baseContext, startPrice };
+  const protectedKeys = protectedContextKeys(product);
+
   const activeRules = rules
     .filter((r) => r.enabled && r.marketplaceId === marketplace.id)
     .sort((a, b) => a.priority - b.priority);
 
-  /**
-   * Каскад: правила проверяются по возрастанию приоритета. Если подошедшее правило не финальное
-   * (isFinal === false), его цена передаётся следующему подходящему правилу через prevPrice
-   * (0, если ещё ни одно правило не сработало) — вместо того, чтобы сразу стать итоговой. Поиск
-   * следующего правила продолжается строго после позиции текущего в отсортированном списке, поэтому
-   * одно и то же правило не может сработать дважды и бесконечный цикл невозможен.
-   */
-  let price = 0;
-  let netProceeds = 0;
-  let marginRatio = 0;
-  let iterations = 0;
   const appliedRuleIds: string[] = [];
-  let lastAppliedRule: RuleLike | null = null;
-  let lastStageContext: ExpressionContext = context;
   let searchFrom = 0;
 
   for (;;) {
@@ -179,7 +182,7 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
       if (idx < searchFrom) return false;
       const conditionExpr = getConditionExpression(rule);
       try {
-        return evaluateCondition(conditionExpr, { ...context, prevPrice: price });
+        return evaluateCondition(conditionExpr, context);
       } catch (e) {
         warnings.push(`Правило "${rule.name}": ошибка в условии — ${e instanceof Error ? e.message : String(e)}`);
         return false;
@@ -188,48 +191,16 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     if (matchIndex === -1) break;
 
     const rule = activeRules[matchIndex];
-    const stageContext: ExpressionContext = { ...context, prevPrice: price };
-
-    try {
-      if (effectivePriceMode(rule, marketplace) === "direct") {
-        price = evaluateFormula(rule.formula, stageContext);
-        netProceeds = price - product.cost - (context.expensesTotal as number);
-        marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
-      } else {
-        const solved = solvePrice(
-          (candidatePrice) => evaluateFormula(rule.formula, { ...stageContext, price: candidatePrice }),
-          product.cost,
-          marketplace.solver,
-        );
-        price = solved.price;
-        netProceeds = solved.netProceeds;
-        marginRatio = solved.marginRatio;
-        iterations += solved.iterations;
-        if (!solved.converged) {
-          warnings.push(`Решение не найдено за ${marketplace.solver.maxIterations} итераций — взята ближайшая цена`);
-        }
-      }
-    } catch (e) {
-      warnings.push(`Правило "${rule.name}": ошибка в формуле — ${e instanceof Error ? e.message : String(e)}`);
-      if (appliedRuleIds.length === 0) {
-        return emptyResult(product.id, marketplace.id, warnings);
-      }
-      break;
-    }
-
-    price = applyPostScript(rule.postScript, stageContext, price, warnings);
+    context = runActionScript(rule.actionScript, context, protectedKeys, rule.name, warnings);
     appliedRuleIds.push(rule.id);
-    lastAppliedRule = rule;
-    lastStageContext = stageContext;
 
     if (rule.isFinal) break;
     searchFrom = matchIndex + 1;
   }
 
-  if (!lastAppliedRule) {
-    warnings.push("Ни одно правило не подошло для этого товара");
-    return emptyResult(product.id, marketplace.id, warnings);
-  }
+  const finalStartPrice = Number(context.startPrice);
+  const priceFallback = Number.isFinite(finalStartPrice) ? finalStartPrice : startPrice;
+  let price = runExpressionScript(marketplace.priceFormulaScript, context, priceFallback, "Основная формула", warnings);
 
   if (marketplace.minPriceFormula.trim()) {
     try {
@@ -257,17 +228,15 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
 
   price = applyRounding(price, marketplace.rounding);
 
-  if (effectivePriceMode(lastAppliedRule, marketplace) === "targetMargin") {
-    try {
-      netProceeds = evaluateFormula(lastAppliedRule.formula, { ...lastStageContext, price });
-      marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
-    } catch {
-      // если формула перестала считаться на округлённой цене — оставляем последнее известное значение
-    }
-  } else {
-    netProceeds = price - product.cost - (context.expensesTotal as number);
-    marginRatio = product.cost !== 0 ? netProceeds / product.cost : 0;
-  }
+  const commissionRate = Number(context.commissionRate) || 0;
+  const discount = Number(context.discount) || 0;
+  const taxRate = Number(context.taxRate) || 0;
+  const logistics = Number(context.logistics) || 0;
+  const ads = Number(context.ads) || 0;
+  const otherExpenses = Number(context.otherExpenses) || 0;
+  const netProceeds =
+    price - price * commissionRate - price * (1 - discount) * taxRate - logistics - ads - otherExpenses;
+  const marginRatio = price !== 0 ? netProceeds / price : 0;
 
   return {
     productId: product.id,
@@ -275,9 +244,8 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     price,
     netProceeds,
     marginRatio,
-    appliedRuleId: lastAppliedRule.id,
+    appliedRuleId: appliedRuleIds.length ? appliedRuleIds[appliedRuleIds.length - 1] : null,
     appliedRuleIds,
-    iterations,
     warnings,
   };
 }

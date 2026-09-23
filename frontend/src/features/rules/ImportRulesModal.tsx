@@ -28,8 +28,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
           priority: cellToNumber(getCell(row, RULE_SHEET_COLUMNS.priority)),
           enabled: cellToBoolean(getCell(row, RULE_SHEET_COLUMNS.enabled)),
           rawCondition: cellToString(getCell(row, RULE_SHEET_COLUMNS.condition)),
-          formula: cellToString(getCell(row, RULE_SHEET_COLUMNS.formula)),
-          postScript: cellToString(getCell(row, RULE_SHEET_COLUMNS.postScript)) || undefined,
+          actionScript: cellToString(getCell(row, RULE_SHEET_COLUMNS.actionScript)) || undefined,
           // Нет колонки «Финальное» — значит файл экспортирован до появления каскадных правил,
           // считаем все правила финальными (прежнее поведение).
           isFinal: (() => {
@@ -37,7 +36,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
             return cell === undefined ? true : cellToBoolean(cell);
           })(),
         }))
-        .filter((r) => r.name && r.formula),
+        .filter((r) => r.name),
     [objects],
   );
 
@@ -81,7 +80,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
 
           <Alert color="blue" variant="light">
             Ожидаются колонки: «{RULE_SHEET_COLUMNS.name}», «{RULE_SHEET_COLUMNS.priority}», «{RULE_SHEET_COLUMNS.enabled}», «
-            {RULE_SHEET_COLUMNS.condition}», «{RULE_SHEET_COLUMNS.formula}», «{RULE_SHEET_COLUMNS.postScript}» (необязательно), «
+            {RULE_SHEET_COLUMNS.condition}», «{RULE_SHEET_COLUMNS.actionScript}» (необязательно), «
             {RULE_SHEET_COLUMNS.isFinal}» (необязательно, по умолчанию «да») — именно в этом формате «Экспорт» сохраняет файл. Условие
             всегда загружается как сырое выражение. Правило с таким же названием в этом маркетплейсе будет обновлено, иначе — создано
             новое.
@@ -96,7 +95,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
                     <Table.Th>{RULE_SHEET_COLUMNS.priority}</Table.Th>
                     <Table.Th>{RULE_SHEET_COLUMNS.enabled}</Table.Th>
                     <Table.Th>{RULE_SHEET_COLUMNS.condition}</Table.Th>
-                    <Table.Th>{RULE_SHEET_COLUMNS.formula}</Table.Th>
+                    <Table.Th>{RULE_SHEET_COLUMNS.actionScript}</Table.Th>
                     <Table.Th>{RULE_SHEET_COLUMNS.isFinal}</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
@@ -107,7 +106,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
                       <Table.Td>{r.priority}</Table.Td>
                       <Table.Td>{r.enabled ? "да" : "нет"}</Table.Td>
                       <Table.Td>{r.rawCondition || "—"}</Table.Td>
-                      <Table.Td>{r.formula}</Table.Td>
+                      <Table.Td>{r.actionScript || "—"}</Table.Td>
                       <Table.Td>{r.isFinal ? "да" : "нет"}</Table.Td>
                     </Table.Tr>
                   ))}
@@ -116,7 +115,7 @@ export function ImportRulesModal({ marketplace, onDone }: { marketplace: Marketp
             </ScrollArea.Autosize>
           ) : (
             <Text c="dimmed" size="sm">
-              Не найдено ни одной строки с заполненными «{RULE_SHEET_COLUMNS.name}» и «{RULE_SHEET_COLUMNS.formula}».
+              Не найдено ни одной строки с заполненным «{RULE_SHEET_COLUMNS.name}».
             </Text>
           )}
 

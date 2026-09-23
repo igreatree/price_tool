@@ -23,7 +23,7 @@ export class RulesService {
         marketplaceId,
         conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue,
         rawCondition: dto.rawCondition ?? "",
-        postScript: dto.postScript?.trim() || null,
+        actionScript: dto.actionScript?.trim() ?? "",
         // undefined здесь Prisma трактует как "поле не передано" — на create применится дефолт "{}"
         schedule: dto.schedule as unknown as Prisma.InputJsonValue,
       },
@@ -37,7 +37,7 @@ export class RulesService {
         ...dto,
         conditionGroup: dto.conditionGroup as unknown as Prisma.InputJsonValue,
         rawCondition: dto.rawCondition ?? "",
-        postScript: dto.postScript?.trim() || null,
+        actionScript: dto.actionScript?.trim() ?? "",
         schedule: dto.schedule as unknown as Prisma.InputJsonValue,
       },
     });
@@ -68,8 +68,7 @@ export class RulesService {
           conditionMode: "raw" as const,
           conditionGroup: EMPTY_CONDITION_GROUP,
           rawCondition: row.rawCondition ?? "",
-          formula: row.formula.trim(),
-          postScript: row.postScript?.trim() || null,
+          actionScript: row.actionScript?.trim() ?? "",
           isFinal: row.isFinal ?? true,
         };
         return match

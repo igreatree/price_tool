@@ -1,15 +1,15 @@
 import { api } from "./client";
-import type { Marketplace, PricingMode, RoundingConfig, SolverConfig } from "../types";
+import type { Marketplace, RoundingConfig } from "../types";
 
 export interface MarketplaceInput {
   name: string;
-  pricingMode: PricingMode;
   rounding: RoundingConfig;
   minPriceFormula?: string;
   maxPriceFormula?: string;
-  solver: SolverConfig;
   excludedProductIds?: string[];
   exclusionCondition?: string;
+  startPriceScript: string;
+  priceFormulaScript: string;
 }
 
 export const marketplacesApi = {

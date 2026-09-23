@@ -48,28 +48,21 @@ export interface RoundingConfig {
   forceEnding?: number;
 }
 
-export type PricingMode = "direct" | "targetMargin";
-
-export interface SolverConfig {
-  minX: number;
-  maxX: number;
-  searchMultiplierMin: number;
-  searchMultiplierMax: number;
-  maxIterations: number;
-}
-
 export type WeekDay = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export interface Marketplace {
   id: string;
   name: string;
-  pricingMode: PricingMode;
   rounding: RoundingConfig;
   minPriceFormula: string;
   maxPriceFormula: string;
-  solver: SolverConfig;
   excludedProductIds: string[];
   exclusionCondition: string;
+  /** JS-скрипт, вычисляющий стартовую цену товара (обязателен явный return числа). */
+  startPriceScript: string;
+  /** Основная JS-формула, вычисляющая итоговую цену из startPrice и переменных (обязателен явный
+   * return числа). */
+  priceFormulaScript: string;
   createdAt: string;
 }
 
@@ -111,14 +104,12 @@ export interface Rule {
   conditionMode: RuleConditionMode;
   conditionGroup: ConditionGroup;
   rawCondition: string;
-  formula: string;
-  postScript?: string;
+  /** JS-скрипт действия: меняет переменные контекста расчёта (напр. commissionRate = commissionRate + 0.05;). */
+  actionScript: string;
   /** Если false — при совпадении условия каскад продолжается к следующему подходящему правилу
-   * (по приоритету), которому передаётся цена этого правила через переменную prevPrice. */
+   * (по приоритету), сохраняя изменения переменных, сделанные этим правилом. */
   isFinal: boolean;
   schedule: RuleSchedule;
-  /** Переопределяет pricingMode маркетплейса для этого правила. null — наследует режим маркетплейса. */
-  priceMode: PricingMode | null;
   createdAt: string;
 }
 
@@ -131,7 +122,6 @@ export interface CalculatedPrice {
   marginRatio: number;
   appliedRuleId: string | null;
   appliedRuleIds: string[];
-  iterations: number;
   calculatedAt: string;
   warnings: string[];
 }

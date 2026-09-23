@@ -13,30 +13,10 @@ export class RoundingConfigDto {
   forceEnding?: number | null;
 }
 
-export class SolverConfigDto {
-  @IsNumber()
-  minX!: number;
-
-  @IsNumber()
-  maxX!: number;
-
-  @IsNumber()
-  searchMultiplierMin!: number;
-
-  @IsNumber()
-  searchMultiplierMax!: number;
-
-  @IsNumber()
-  maxIterations!: number;
-}
-
 export class CreateMarketplaceDto {
   @IsString()
   @MinLength(1)
   name!: string;
-
-  @IsIn(["direct", "targetMargin"])
-  pricingMode!: "direct" | "targetMargin";
 
   @ValidateNested()
   @Type(() => RoundingConfigDto)
@@ -50,10 +30,6 @@ export class CreateMarketplaceDto {
   @IsString()
   maxPriceFormula?: string;
 
-  @ValidateNested()
-  @Type(() => SolverConfigDto)
-  solver!: SolverConfigDto;
-
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -62,6 +38,12 @@ export class CreateMarketplaceDto {
   @IsOptional()
   @IsString()
   exclusionCondition?: string;
+
+  @IsString()
+  startPriceScript!: string;
+
+  @IsString()
+  priceFormulaScript!: string;
 }
 
 export class UpdateMarketplaceDto extends CreateMarketplaceDto {}

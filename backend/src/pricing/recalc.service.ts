@@ -9,7 +9,6 @@ import type {
   ProductLike,
   RoundingConfig,
   RuleLike,
-  SolverConfig,
 } from "./types";
 
 function toProductLike(p: Product): ProductLike {
@@ -38,13 +37,13 @@ function toMarketplaceLike(m: Marketplace): MarketplaceLike {
   return {
     id: m.id,
     name: m.name,
-    pricingMode: m.pricingMode,
     rounding: m.rounding as unknown as RoundingConfig,
     minPriceFormula: m.minPriceFormula,
     maxPriceFormula: m.maxPriceFormula,
-    solver: m.solver as unknown as SolverConfig,
     excludedProductIds: m.excludedProductIds,
     exclusionCondition: m.exclusionCondition,
+    startPriceScript: m.startPriceScript,
+    priceFormulaScript: m.priceFormulaScript,
   };
 }
 
@@ -58,10 +57,8 @@ function toRuleLike(r: Rule): RuleLike {
     conditionMode: r.conditionMode,
     conditionGroup: r.conditionGroup as unknown as ConditionGroup,
     rawCondition: r.rawCondition,
-    formula: r.formula,
-    postScript: r.postScript,
+    actionScript: r.actionScript,
     isFinal: r.isFinal,
-    priceMode: r.priceMode,
   };
 }
 
@@ -83,7 +80,6 @@ export class RecalcService {
           marginRatio: 0,
           appliedRuleId: null,
           appliedRuleIds: [],
-          iterations: 0,
           warnings: result.warnings,
         },
         update: {
@@ -104,7 +100,6 @@ export class RecalcService {
         marginRatio: result.marginRatio,
         appliedRuleId: result.appliedRuleId,
         appliedRuleIds: result.appliedRuleIds,
-        iterations: result.iterations,
         warnings: result.warnings,
       },
       update: {
@@ -113,7 +108,6 @@ export class RecalcService {
         marginRatio: result.marginRatio,
         appliedRuleId: result.appliedRuleId,
         appliedRuleIds: result.appliedRuleIds,
-        iterations: result.iterations,
         warnings: result.warnings,
         calculatedAt: new Date(),
       },

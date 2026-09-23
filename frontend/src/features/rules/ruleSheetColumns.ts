@@ -5,7 +5,6 @@ export const RULE_SHEET_COLUMNS = {
   priority: "Приоритет",
   enabled: "Активно",
   condition: "Условие",
-  formula: "Формула",
-  postScript: "Скрипт",
+  actionScript: "Скрипт действия",
   isFinal: "Финальное",
 } as const;

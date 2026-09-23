@@ -20,7 +20,6 @@ export class MarketplacesService {
       data: {
         ...dto,
         rounding: dto.rounding as unknown as Prisma.InputJsonValue,
-        solver: dto.solver as unknown as Prisma.InputJsonValue,
         minPriceFormula: dto.minPriceFormula ?? "",
         maxPriceFormula: dto.maxPriceFormula ?? "",
         excludedProductIds: dto.excludedProductIds ?? [],
@@ -35,7 +34,6 @@ export class MarketplacesService {
       data: {
         ...dto,
         rounding: dto.rounding as unknown as Prisma.InputJsonValue,
-        solver: dto.solver as unknown as Prisma.InputJsonValue,
         minPriceFormula: dto.minPriceFormula ?? "",
         maxPriceFormula: dto.maxPriceFormula ?? "",
         excludedProductIds: dto.excludedProductIds ?? [],

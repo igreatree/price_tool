@@ -106,15 +106,13 @@ export class CreateRuleBodyDto {
   @IsString()
   rawCondition?: string;
 
-  @IsString()
-  formula!: string;
-
+  /** JS-скрипт действия: меняет переменные контекста расчёта (напр. commissionRate = commissionRate + 0.05;). */
   @IsOptional()
   @IsString()
-  postScript?: string;
+  actionScript?: string;
 
   /** Если false — при совпадении условия каскад продолжается к следующему подходящему правилу
-   * (по приоритету), которому передаётся цена этого правила через prevPrice. */
+   * (по приоритету), сохраняя изменения переменных, сделанные этим правилом. */
   @IsBoolean()
   isFinal!: boolean;
 
@@ -123,11 +121,6 @@ export class CreateRuleBodyDto {
   @ValidateNested()
   @Type(() => RuleScheduleDto)
   schedule?: RuleScheduleDto;
-
-  /** Переопределяет pricingMode маркетплейса для этого правила. null/не задано — наследует режим маркетплейса. */
-  @IsOptional()
-  @IsIn(["direct", "targetMargin"])
-  priceMode?: "direct" | "targetMargin" | null;
 }
 
 export class UpdateRuleDto extends CreateRuleBodyDto {}
@@ -158,18 +151,11 @@ export class ImportRuleRowDto {
   @IsString()
   rawCondition?: string;
 
-  @IsString()
-  formula!: string;
-
   @IsOptional()
   @IsString()
-  postScript?: string;
+  actionScript?: string;
 
   @IsOptional()
   @IsBoolean()
   isFinal?: boolean;
-
-  @IsOptional()
-  @IsIn(["direct", "targetMargin"])
-  priceMode?: "direct" | "targetMargin" | null;
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ActionIcon, Badge, Button, Card, Center, Group, Loader, Modal, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { ActionIcon, Button, Card, Center, Group, Loader, Modal, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { marketplacesApi } from "../../api/marketplaces";
@@ -57,9 +57,6 @@ export function MarketplacesPage() {
                 <IconTrash size={16} />
               </ActionIcon>
             </Group>
-            <Badge color={m.pricingMode === "direct" ? "gray" : "indigo"}>
-              {m.pricingMode === "direct" ? "Прямая формула" : "Целевая маржа"}
-            </Badge>
           </Card>
         ))}
       </SimpleGrid>
