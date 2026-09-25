@@ -7,6 +7,7 @@ import { notifications } from "@mantine/notifications";
 import { calculatedPricesApi } from "../../api/calculatedPrices";
 import { productsApi } from "../../api/products";
 import { rulesApi } from "../../api/rules";
+import { countRulesApi } from "../../api/countRules";
 import type { CalculatedPrice, Marketplace, Product } from "../../types";
 import { DataTable } from "../../components/DataTable";
 import { exportRowsToExcel } from "../../utils/excel";
@@ -14,6 +15,7 @@ import { exportRowsToExcel } from "../../utils/excel";
 interface Row extends CalculatedPrice {
   product: Product | undefined;
   ruleName: string;
+  countRuleName: string;
   allWarnings: string[];
 }
 
@@ -25,25 +27,36 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
   });
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const { data: rules } = useQuery({ queryKey: ["rules", marketplace.id], queryFn: () => rulesApi.listByMarketplace(marketplace.id) });
+  const { data: countRules } = useQuery({
+    queryKey: ["countRules", marketplace.id],
+    queryFn: () => countRulesApi.listByMarketplace(marketplace.id),
+  });
   const [search, setSearch] = useState("");
   const [recalculatingPrice, setRecalculatingPrice] = useState(false);
   const [recalculatingCount, setRecalculatingCount] = useState(false);
 
   const productsById = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
   const rulesById = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r])), [rules]);
+  const countRulesById = useMemo(() => new Map((countRules ?? []).map((r) => [r.id, r])), [countRules]);
 
   const rows = useMemo<Row[]>(
     () =>
       (calculatedPrices ?? []).map((cp) => {
         const chainIds = cp.appliedRuleIds.length ? cp.appliedRuleIds : cp.appliedRuleId ? [cp.appliedRuleId] : [];
+        const countChainIds = cp.appliedCountRuleIds.length
+          ? cp.appliedCountRuleIds
+          : cp.appliedCountRuleId
+            ? [cp.appliedCountRuleId]
+            : [];
         return {
           ...cp,
           product: productsById.get(cp.productId),
           ruleName: chainIds.length ? chainIds.map((id) => rulesById.get(id)?.name ?? "—").join(" → ") : "—",
+          countRuleName: countChainIds.length ? countChainIds.map((id) => countRulesById.get(id)?.name ?? "—").join(" → ") : "—",
           allWarnings: [...cp.warnings, ...cp.countWarnings],
         };
       }),
-    [calculatedPrices, productsById, rulesById],
+    [calculatedPrices, productsById, rulesById, countRulesById],
   );
 
   const filtered = useMemo(() => {
@@ -84,6 +97,8 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
         "Чистая выручка": r.netProceeds,
         X: r.marginRatio,
         Остаток: r.count,
+        "Правило цены": r.ruleName,
+        "Правило остатка": r.countRuleName,
         Предупреждения: r.allWarnings.join("; "),
       }));
     exportRowsToExcel(marketplace.name, exportRows, `${marketplace.name}_цены.xlsx`);
@@ -97,7 +112,8 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
       { header: "Выручка", accessorKey: "netProceeds", cell: (info) => Number(info.getValue()).toFixed(2) },
       { header: "X", accessorKey: "marginRatio", cell: (info) => Number(info.getValue()).toFixed(3) },
       { header: "Остаток", accessorKey: "count" },
-      { header: "Правило", accessorKey: "ruleName" },
+      { header: "Правило цены", accessorKey: "ruleName" },
+      { header: "Правило остатка", accessorKey: "countRuleName" },
       {
         header: "Предупреждения",
         id: "warnings",
