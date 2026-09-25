@@ -5,6 +5,8 @@ export interface SupplierPriceInput {
   productId: string;
   supplierName: string;
   price: number;
+  /** Остаток товара у этого поставщика. По умолчанию 0. */
+  count?: number;
 }
 
 export const supplierPricesApi = {

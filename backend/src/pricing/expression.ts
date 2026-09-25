@@ -5,7 +5,16 @@ const parser = new Parser();
 parser.functions.contains = (haystack: unknown, needle: unknown) =>
   String(haystack ?? "").toLowerCase().includes(String(needle ?? "").toLowerCase());
 
-export type ExpressionContext = Record<string, number | string | ((...args: any[]) => number)>;
+export interface SupplierDataEntry {
+  name: string;
+  price: number;
+  count: number;
+}
+
+export type ExpressionContext = Record<
+  string,
+  number | string | ((...args: any[]) => number) | SupplierDataEntry[]
+>;
 
 export class ExpressionError extends Error {}
 
@@ -32,15 +41,20 @@ export function parseExpression(expr: string): Expression {
   }
 }
 
+// expr-eval понимает только числа/строки/функции — не массивы объектов вроде supplierPrices
+// (тот доступен только в JS-скриптах). Кастуем на границе вызова библиотеки: значения ключей,
+// которые формула/условие реально не используют, expr-eval просто не трогает.
 export function evaluateCondition(expr: string, context: ExpressionContext): boolean {
   if (!expr.trim()) return true;
   const parsed = parseExpression(expr);
-  return Boolean(parsed.evaluate(context));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- см. комментарий выше
+  return Boolean(parsed.evaluate(context as any));
 }
 
 export function evaluateFormula(expr: string, context: ExpressionContext): number {
   const parsed = parseExpression(expr);
-  const result = parsed.evaluate(context);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- см. комментарий выше
+  const result = parsed.evaluate(context as any);
   const num = Number(result);
   if (!Number.isFinite(num)) {
     throw new ExpressionError(`Формула вернула не число: ${String(result)}`);

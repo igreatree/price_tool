@@ -13,6 +13,8 @@ export interface SupplierPrice {
   productId: string;
   supplierName: string;
   price: number;
+  /** Остаток товара у этого поставщика. */
+  count: number;
   updatedAt: string;
 }
 
@@ -113,6 +115,23 @@ export interface Rule {
   createdAt: string;
 }
 
+export interface CountRule {
+  id: string;
+  marketplaceId: string;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  conditionMode: RuleConditionMode;
+  conditionGroup: ConditionGroup;
+  rawCondition: string;
+  /** JS-скрипт: обязателен явный return числа — остаток товара, если условие подошло. */
+  script: string;
+  /** Если false — при совпадении условия каскад продолжается к следующему подходящему правилу
+   * (по приоритету), которому передаётся результат этого правила через prevCount. */
+  isFinal: boolean;
+  createdAt: string;
+}
+
 export interface CalculatedPrice {
   id: string;
   productId: string;
@@ -124,4 +143,10 @@ export interface CalculatedPrice {
   appliedRuleIds: string[];
   calculatedAt: string;
   warnings: string[];
+  /** Остаток товара — считается независимо от цены, каскадом «Правил остатков». */
+  count: number;
+  appliedCountRuleId: string | null;
+  appliedCountRuleIds: string[];
+  countWarnings: string[];
+  countCalculatedAt: string | null;
 }

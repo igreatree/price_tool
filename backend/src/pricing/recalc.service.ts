@@ -1,14 +1,17 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { Expense, Marketplace, Product, Rule } from "@prisma/client";
+import type { CountRule, Expense, Marketplace, Product, Rule, SupplierPrice } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { calculatePrice, type CalculatePriceResult } from "./calculate-price";
+import { calculateCount, type CalculateCountResult } from "./calculate-count";
 import type {
   ConditionGroup,
+  CountRuleLike,
   ExpenseLike,
   MarketplaceLike,
   ProductLike,
   RoundingConfig,
   RuleLike,
+  SupplierPriceLike,
 } from "./types";
 
 function toProductLike(p: Product): ProductLike {
@@ -20,6 +23,10 @@ function toProductLike(p: Product): ProductLike {
     cost: p.cost,
     extra: (p.extra as Record<string, string | number>) ?? {},
   };
+}
+
+function toSupplierPriceLike(s: SupplierPrice): SupplierPriceLike {
+  return { id: s.id, productId: s.productId, supplierName: s.supplierName, price: s.price, count: s.count };
 }
 
 function toExpenseLike(e: Expense): ExpenseLike {
@@ -58,6 +65,21 @@ function toRuleLike(r: Rule): RuleLike {
     conditionGroup: r.conditionGroup as unknown as ConditionGroup,
     rawCondition: r.rawCondition,
     actionScript: r.actionScript,
+    isFinal: r.isFinal,
+  };
+}
+
+function toCountRuleLike(r: CountRule): CountRuleLike {
+  return {
+    id: r.id,
+    marketplaceId: r.marketplaceId,
+    name: r.name,
+    priority: r.priority,
+    enabled: r.enabled,
+    conditionMode: r.conditionMode,
+    conditionGroup: r.conditionGroup as unknown as ConditionGroup,
+    rawCondition: r.rawCondition,
+    script: r.script,
     isFinal: r.isFinal,
   };
 }
@@ -126,7 +148,7 @@ export class RecalcService {
 
     const result = calculatePrice({
       product: toProductLike(product),
-      supplierPrices: supplierPrices.map((s) => ({ id: s.id, productId: s.productId, supplierName: s.supplierName, price: s.price })),
+      supplierPrices: supplierPrices.map(toSupplierPriceLike),
       marketplaceParams: marketplaceParams ?? undefined,
       expenses: expenses.map(toExpenseLike),
       marketplace: toMarketplaceLike(marketplace),
@@ -176,12 +198,7 @@ export class RecalcService {
       const results = chunk.map((product) =>
         calculatePrice({
           product: toProductLike(product),
-          supplierPrices: (supplierPricesByProduct.get(product.id) ?? []).map((s) => ({
-            id: s.id,
-            productId: s.productId,
-            supplierName: s.supplierName,
-            price: s.price,
-          })),
+          supplierPrices: (supplierPricesByProduct.get(product.id) ?? []).map(toSupplierPriceLike),
           marketplaceParams: paramsByProduct.get(product.id) ?? undefined,
           expenses: expenseLikes,
           marketplace: marketplaceLike,
@@ -200,5 +217,104 @@ export class RecalcService {
     for (const marketplace of marketplaces) {
       await this.recalcMarketplace(marketplace.id);
     }
+  }
+
+  /** Остаток считается и сохраняется независимо от цены — update здесь трогает только count-поля,
+   * оставляя цену нетронутой (и наоборот, см. persist() выше). */
+  private async persistCount(result: CalculateCountResult): Promise<void> {
+    await this.prisma.calculatedPrice.upsert({
+      where: { productId_marketplaceId: { productId: result.productId, marketplaceId: result.marketplaceId } },
+      create: {
+        productId: result.productId,
+        marketplaceId: result.marketplaceId,
+        price: 0,
+        netProceeds: 0,
+        marginRatio: 0,
+        appliedRuleId: null,
+        appliedRuleIds: [],
+        warnings: [],
+        count: result.count,
+        appliedCountRuleId: result.appliedRuleId,
+        appliedCountRuleIds: result.appliedRuleIds,
+        countWarnings: result.warnings,
+        countCalculatedAt: new Date(),
+      },
+      update: {
+        count: result.count,
+        appliedCountRuleId: result.appliedRuleId,
+        appliedCountRuleIds: result.appliedRuleIds,
+        countWarnings: result.warnings,
+        countCalculatedAt: new Date(),
+      },
+    });
+  }
+
+  async recalcProductCountForMarketplace(productId: string, marketplaceId: string): Promise<CalculateCountResult> {
+    const [product, marketplaceParams, expenses, rules, supplierPrices] = await Promise.all([
+      this.prisma.product.findUniqueOrThrow({ where: { id: productId } }),
+      this.prisma.marketplaceProductParams.findUnique({ where: { productId_marketplaceId: { productId, marketplaceId } } }),
+      this.prisma.expense.findMany(),
+      this.prisma.countRule.findMany({ where: { marketplaceId } }),
+      this.prisma.supplierPrice.findMany({ where: { productId } }),
+    ]);
+
+    const result = calculateCount({
+      product: toProductLike(product),
+      supplierPrices: supplierPrices.map(toSupplierPriceLike),
+      marketplaceParams: marketplaceParams ?? undefined,
+      expenses: expenses.map(toExpenseLike),
+      marketplaceId,
+      rules: rules.map(toCountRuleLike),
+    });
+
+    await this.persistCount(result);
+    return result;
+  }
+
+  async recalcCountMarketplace(marketplaceId: string, chunkSize = 300): Promise<{ productsCount: number }> {
+    const marketplace = await this.prisma.marketplace.findUnique({ where: { id: marketplaceId } });
+    if (!marketplace) throw new NotFoundException("Маркетплейс не найден");
+
+    const [products, expenses, rules] = await Promise.all([
+      this.prisma.product.findMany(),
+      this.prisma.expense.findMany(),
+      this.prisma.countRule.findMany({ where: { marketplaceId } }),
+    ]);
+
+    const expenseLikes = expenses.map(toExpenseLike);
+    const ruleLikes = rules.map(toCountRuleLike);
+
+    for (let i = 0; i < products.length; i += chunkSize) {
+      const chunk = products.slice(i, i + chunkSize);
+      const productIds = chunk.map((p) => p.id);
+
+      const [supplierPrices, paramsList] = await Promise.all([
+        this.prisma.supplierPrice.findMany({ where: { productId: { in: productIds } } }),
+        this.prisma.marketplaceProductParams.findMany({ where: { marketplaceId, productId: { in: productIds } } }),
+      ]);
+
+      const supplierPricesByProduct = new Map<string, typeof supplierPrices>();
+      for (const sp of supplierPrices) {
+        const list = supplierPricesByProduct.get(sp.productId) ?? [];
+        list.push(sp);
+        supplierPricesByProduct.set(sp.productId, list);
+      }
+      const paramsByProduct = new Map(paramsList.map((p) => [p.productId, p]));
+
+      const results = chunk.map((product) =>
+        calculateCount({
+          product: toProductLike(product),
+          supplierPrices: (supplierPricesByProduct.get(product.id) ?? []).map(toSupplierPriceLike),
+          marketplaceParams: paramsByProduct.get(product.id) ?? undefined,
+          expenses: expenseLikes,
+          marketplaceId,
+          rules: ruleLikes,
+        }),
+      );
+
+      await Promise.all(results.map((r) => this.persistCount(r)));
+    }
+
+    return { productsCount: products.length };
   }
 }

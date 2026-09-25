@@ -44,6 +44,10 @@ model SupplierPrice {
   product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   supplierName String
   price        Float
+  /**
+   * Остаток товара у этого поставщика.
+   */
+  count        Int      @default(0)
   updatedAt    DateTime @updatedAt
 
   @@index([productId])
@@ -69,8 +73,9 @@ model Marketplace {
   /**
    * JS-скрипт, вычисляющий стартовую цену товара (обязателен явный return числа). Видит базовый
    * контекст: cost, brand, name, externalId, ...extra, bestSupplierPrice, supplierPricesCount,
-   * supplierPrice("Поставщик"), expensesTotal, а также discount/taxRate/commissionRate/logistics/
-   * ads/otherExpenses из MarketplaceProductParams. Пример:
+   * supplierPrice("Поставщик"), supplierData (массив [{name, price, count}, ...] по всем
+   * поставщикам — count это остаток у поставщика), expensesTotal, а также discount/taxRate/
+   * commissionRate/logistics/ads/otherExpenses из MarketplaceProductParams. Пример:
    * return brand.toLowerCase().includes("wella") ? supplierPrice("Поставщик1") : cost;
    */
   startPriceScript   String   @default("return cost;")
@@ -83,6 +88,7 @@ model Marketplace {
   createdAt          DateTime @default(now())
 
   rules                    Rule[]
+  countRules               CountRule[]
   marketplaceProductParams MarketplaceProductParams[]
   calculatedPrices         CalculatedPrice[]
 }
@@ -123,6 +129,33 @@ model Rule {
   @@index([marketplaceId])
 }
 
+model CountRule {
+  id             String            @id @default(cuid())
+  marketplaceId  String
+  marketplace    Marketplace       @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  name           String
+  priority       Int               @default(0)
+  enabled        Boolean           @default(true)
+  conditionMode  RuleConditionMode @default(builder)
+  conditionGroup Json
+  rawCondition   String            @default("")
+  /**
+   * JS-скрипт: обязателен явный return числа — остаток товара, если условие подошло. Видит тот же
+   * базовый контекст, что и правила цен (cost, brand, ..., supplierData, ...), а также prevCount —
+   * результат предыдущего неполного правила в цепочке (0, если это первое сработавшее правило).
+   */
+  script         String            @default("return prevCount;")
+  /**
+   * Если false — при совпадении условия каскад не останавливается на этом правиле, а продолжает
+   * искать следующее подходящее правило (по возрастанию приоритета), передавая ему результат этого
+   * правила через prevCount.
+   */
+  isFinal        Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+
+  @@index([marketplaceId])
+}
+
 model MarketplaceProductParams {
   id             String      @id @default(cuid())
   productId      String
@@ -142,21 +175,29 @@ model MarketplaceProductParams {
 }
 
 model CalculatedPrice {
-  id             String      @id @default(cuid())
-  productId      String
-  product        Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  marketplaceId  String
-  marketplace    Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
-  price          Float
-  netProceeds    Float
-  marginRatio    Float
-  appliedRuleId  String?
+  id                  String      @id @default(cuid())
+  productId           String
+  product             Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  marketplaceId       String
+  marketplace         Marketplace @relation(fields: [marketplaceId], references: [id], onDelete: Cascade)
+  price               Float
+  netProceeds         Float
+  marginRatio         Float
+  appliedRuleId       String?
   /**
    * Вся цепочка применённых правил по порядку (для каскадных правил — несколько id, иначе один).
    */
-  appliedRuleIds String[]    @default([])
-  calculatedAt   DateTime    @default(now())
-  warnings       String[]    @default([])
+  appliedRuleIds      String[]    @default([])
+  calculatedAt        DateTime    @default(now())
+  warnings            String[]    @default([])
+  /**
+   * Остаток товара — считается независимо от цены, каскадом «Правил остатков» (см. CountRule).
+   */
+  count               Int         @default(0)
+  appliedCountRuleId  String?
+  appliedCountRuleIds String[]    @default([])
+  countWarnings       String[]    @default([])
+  countCalculatedAt   DateTime?
 
   @@unique([productId, marketplaceId])
   @@index([marketplaceId])

@@ -36,6 +36,7 @@ export interface SupplierPriceLike {
   productId: string;
   supplierName: string;
   price: number;
+  count: number;
 }
 
 export interface ExpenseLike {
@@ -85,5 +86,21 @@ export interface RuleLike {
   actionScript: string;
   /** Если false — каскад не останавливается на этом правиле: изменения переменных сохраняются и
    * поиск продолжается со следующего подходящего правила. */
+  isFinal: boolean;
+}
+
+export interface CountRuleLike {
+  id: string;
+  marketplaceId: string;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  conditionMode: RuleConditionMode;
+  conditionGroup: ConditionGroup;
+  rawCondition: string;
+  /** JS-скрипт: обязателен явный return числа — остаток товара, если условие подошло. */
+  script: string;
+  /** Если false — каскад не останавливается на этом правиле: результат передаётся дальше как
+   * prevCount следующему подходящему правилу. */
   isFinal: boolean;
 }

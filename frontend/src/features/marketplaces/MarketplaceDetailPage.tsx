@@ -8,6 +8,7 @@ import { marketplacesApi } from "../../api/marketplaces";
 import { MarketplaceForm } from "./MarketplaceForm";
 import { MarketplaceParamsTab } from "../marketplaceParams/MarketplaceParamsTab";
 import { RulesTab } from "../rules/RulesTab";
+import { CountRulesTab } from "../countRules/CountRulesTab";
 import { CalculatedPricesTab } from "../prices/CalculatedPricesTab";
 
 export function MarketplaceDetailPage() {
@@ -40,8 +41,9 @@ export function MarketplaceDetailPage() {
       <Tabs defaultValue="params" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="params">Параметры товаров</Tabs.Tab>
-          <Tabs.Tab value="rules">Правила</Tabs.Tab>
-          <Tabs.Tab value="prices">Расчёт цен</Tabs.Tab>
+          <Tabs.Tab value="rules">Правила цен</Tabs.Tab>
+          <Tabs.Tab value="countRules">Правила остатков</Tabs.Tab>
+          <Tabs.Tab value="prices">Расчёт</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="params" pt="md">
@@ -49,6 +51,9 @@ export function MarketplaceDetailPage() {
         </Tabs.Panel>
         <Tabs.Panel value="rules" pt="md">
           <RulesTab marketplace={marketplace} />
+        </Tabs.Panel>
+        <Tabs.Panel value="countRules" pt="md">
+          <CountRulesTab marketplace={marketplace} />
         </Tabs.Panel>
         <Tabs.Panel value="prices" pt="md">
           <CalculatedPricesTab marketplace={marketplace} />
@@ -62,7 +67,7 @@ export function MarketplaceDetailPage() {
             setEditOpened(false);
             await queryClient.invalidateQueries({ queryKey: ["marketplaces"] });
             notifications.show({
-              message: "Настройки сохранены. Не забудьте нажать «Пересчитать всё» на вкладке «Расчёт цен».",
+              message: "Настройки сохранены. Не забудьте нажать «Рассчитать цену» на вкладке «Расчёт».",
               color: "blue",
             });
           }}

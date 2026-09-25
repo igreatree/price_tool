@@ -87,6 +87,18 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
             </Table.Tr>
             <Table.Tr>
               <Table.Td>
+                <code>supplierData</code>
+              </Table.Td>
+              <Table.Td>
+                Массив цен и остатков всех поставщиков товара:{" "}
+                <code>
+                  [{"{"}name: "Поставщик1", price: 500, count: 30{"}"}, {"{"}name: "Поставщик2", price: 400, count: 12{"}"}]
+                </code>
+                .
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
                 <code>expensesTotal</code>
               </Table.Td>
               <Table.Td>Сумма общих расходов, применимых к товару (вкладка «Расходы»)</Table.Td>

@@ -63,6 +63,7 @@ export function SuppliersPage() {
       { header: "Товар", accessorKey: "productName" },
       { header: "Поставщик", accessorKey: "supplierName" },
       { header: "Цена", accessorKey: "price", cell: (info) => Number(info.getValue()).toLocaleString("ru-RU") },
+      { header: "Остаток", accessorKey: "count" },
       {
         id: "actions",
         header: "",
@@ -145,6 +146,7 @@ function AddSupplierPriceForm({
   const [productId, setProductId] = useState<string | null>(null);
   const [supplierName, setSupplierName] = useState("");
   const [price, setPrice] = useState<number | string>("");
+  const [count, setCount] = useState<number | string>(0);
   const [saving, setSaving] = useState(false);
 
   const options = products.map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` }));
@@ -153,7 +155,7 @@ function AddSupplierPriceForm({
     if (!productId || !supplierName.trim() || price === "") return;
     setSaving(true);
     try {
-      await supplierPricesApi.create({ productId, supplierName: supplierName.trim(), price: Number(price) || 0 });
+      await supplierPricesApi.create({ productId, supplierName: supplierName.trim(), price: Number(price) || 0, count: Number(count) || 0 });
       notifications.show({ message: "Цена поставщика добавлена", color: "green" });
       onSaved();
     } finally {
@@ -166,6 +168,7 @@ function AddSupplierPriceForm({
       <Select label="Товар" placeholder="Выберите товар" data={options} value={productId} onChange={setProductId} searchable required />
       <TextInput label="Поставщик" value={supplierName} onChange={(e) => setSupplierName(e.currentTarget.value)} required />
       <NumberInput label="Цена" min={0} decimalScale={2} value={price} onChange={setPrice} required />
+      <NumberInput label="Остаток" min={0} value={count} onChange={setCount} />
       <Group justify="flex-end">
         <Button onClick={handleSubmit} loading={saving}>
           Сохранить

@@ -24,4 +24,10 @@ export class RecalculateController {
     await this.recalcService.recalcMarketplace(marketplaceId);
     return { ok: true };
   }
+
+  @Post("count")
+  async recalculateCount(@Param("marketplaceId") marketplaceId: string) {
+    await this.recalcService.recalcCountMarketplace(marketplaceId);
+    return { ok: true };
+  }
 }

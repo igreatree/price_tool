@@ -14,6 +14,7 @@ import { exportRowsToExcel } from "../../utils/excel";
 interface Row extends CalculatedPrice {
   product: Product | undefined;
   ruleName: string;
+  allWarnings: string[];
 }
 
 export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace }) {
@@ -25,7 +26,8 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const { data: rules } = useQuery({ queryKey: ["rules", marketplace.id], queryFn: () => rulesApi.listByMarketplace(marketplace.id) });
   const [search, setSearch] = useState("");
-  const [recalculating, setRecalculating] = useState(false);
+  const [recalculatingPrice, setRecalculatingPrice] = useState(false);
+  const [recalculatingCount, setRecalculatingCount] = useState(false);
 
   const productsById = useMemo(() => new Map((products ?? []).map((p) => [p.id, p])), [products]);
   const rulesById = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r])), [rules]);
@@ -38,6 +40,7 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
           ...cp,
           product: productsById.get(cp.productId),
           ruleName: chainIds.length ? chainIds.map((id) => rulesById.get(id)?.name ?? "—").join(" → ") : "—",
+          allWarnings: [...cp.warnings, ...cp.countWarnings],
         };
       }),
     [calculatedPrices, productsById, rulesById],
@@ -49,14 +52,25 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
     return rows.filter((r) => r.product?.name.toLowerCase().includes(q) || r.product?.externalId.toLowerCase().includes(q));
   }, [rows, search]);
 
-  async function handleRecalc() {
-    setRecalculating(true);
+  async function handleRecalcPrice() {
+    setRecalculatingPrice(true);
     try {
       await calculatedPricesApi.recalculate(marketplace.id);
       await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
-      notifications.show({ message: "Пересчёт завершён", color: "green" });
+      notifications.show({ message: "Цена рассчитана", color: "green" });
     } finally {
-      setRecalculating(false);
+      setRecalculatingPrice(false);
+    }
+  }
+
+  async function handleRecalcCount() {
+    setRecalculatingCount(true);
+    try {
+      await calculatedPricesApi.recalculateCount(marketplace.id);
+      await queryClient.invalidateQueries({ queryKey: ["calculatedPrices", marketplace.id] });
+      notifications.show({ message: "Остаток рассчитан", color: "green" });
+    } finally {
+      setRecalculatingCount(false);
     }
   }
 
@@ -69,7 +83,8 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
         Цена: r.price,
         "Чистая выручка": r.netProceeds,
         X: r.marginRatio,
-        Предупреждения: r.warnings.join("; "),
+        Остаток: r.count,
+        Предупреждения: r.allWarnings.join("; "),
       }));
     exportRowsToExcel(marketplace.name, exportRows, `${marketplace.name}_цены.xlsx`);
   }
@@ -81,14 +96,15 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
       { header: "Цена", accessorKey: "price", cell: (info) => Number(info.getValue()).toLocaleString("ru-RU") },
       { header: "Выручка", accessorKey: "netProceeds", cell: (info) => Number(info.getValue()).toFixed(2) },
       { header: "X", accessorKey: "marginRatio", cell: (info) => Number(info.getValue()).toFixed(3) },
+      { header: "Остаток", accessorKey: "count" },
       { header: "Правило", accessorKey: "ruleName" },
       {
         header: "Предупреждения",
         id: "warnings",
         cell: ({ row }) =>
-          row.original.warnings.length ? (
-            <Tooltip label={row.original.warnings.join("; ")} multiline w={280}>
-              <Badge color="yellow">{row.original.warnings.length}</Badge>
+          row.original.allWarnings.length ? (
+            <Tooltip label={row.original.allWarnings.join("; ")} multiline w={280}>
+              <Badge color="yellow">{row.original.allWarnings.length}</Badge>
             </Tooltip>
           ) : null,
       },
@@ -106,8 +122,11 @@ export function CalculatedPricesTab({ marketplace }: { marketplace: Marketplace 
           <Button variant="default" leftSection={<IconDownload size={16} />} onClick={handleExport} disabled={rows.length === 0}>
             Экспорт в Excel
           </Button>
-          <Button leftSection={<IconRefresh size={16} />} onClick={handleRecalc} loading={recalculating}>
-            Пересчитать всё
+          <Button leftSection={<IconRefresh size={16} />} onClick={handleRecalcPrice} loading={recalculatingPrice}>
+            Рассчитать цену
+          </Button>
+          <Button variant="default" leftSection={<IconRefresh size={16} />} onClick={handleRecalcCount} loading={recalculatingCount}>
+            Рассчитать остаток
           </Button>
         </Group>
       </Group>

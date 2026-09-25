@@ -48,6 +48,7 @@ function protectedContextKeys(extra: Record<string, string | number>): Set<strin
     "bestSupplierPrice",
     "supplierPricesCount",
     "supplierPrice",
+    "supplierData",
     "expensesTotal",
     ...Object.keys(extra ?? {}),
   ]);
@@ -177,6 +178,7 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
         const matches = productSupplierPrices.filter((s) => s.supplierName.trim().toLowerCase() === needle);
         return matches.length ? Math.min(...matches.map((s) => s.price)) : 0;
       },
+      supplierData: productSupplierPrices.map((s) => ({ name: s.supplierName, price: s.price, count: s.count })),
       expensesTotal,
       discount: marketplaceParams?.discount ?? 0,
       taxRate: marketplaceParams?.taxRate ?? 0,
@@ -313,6 +315,18 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
               <Table.Td>
                 Цена конкретного поставщика по имени (как оно указано в «Цены поставщиков»), без учёта регистра. 0, если у товара нет цены от
                 такого поставщика.
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>supplierData</code>
+              </Table.Td>
+              <Table.Td>
+                Массив цен и остатков всех поставщиков товара:{" "}
+                <code>
+                  [{"{"}name: "Поставщик1", price: 500, count: 30{"}"}, {"{"}name: "Поставщик2", price: 400, count: 12{"}"}]
+                </code>
+                .
               </Table.Td>
             </Table.Tr>
             <Table.Tr>

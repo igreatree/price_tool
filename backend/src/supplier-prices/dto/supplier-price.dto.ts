@@ -1,4 +1,4 @@
-import { IsNumber, IsString, MinLength } from "class-validator";
+import { IsNumber, IsOptional, IsString, MinLength } from "class-validator";
 
 export class CreateSupplierPriceDto {
   @IsString()
@@ -11,6 +11,11 @@ export class CreateSupplierPriceDto {
 
   @IsNumber()
   price!: number;
+
+  /** Остаток товара у этого поставщика. По умолчанию 0. */
+  @IsOptional()
+  @IsNumber()
+  count?: number;
 }
 
 export class ImportSupplierPriceRowDto extends CreateSupplierPriceDto {}

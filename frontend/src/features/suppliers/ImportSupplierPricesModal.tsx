@@ -23,6 +23,7 @@ interface SupplierPairMapping {
   priceColumn: string;
   supplierColumn: string;
   defaultSupplierName: string;
+  countColumn: string;
 }
 
 export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
@@ -82,8 +83,9 @@ export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
           if (!price || price <= 0) continue;
           const supplierName =
             (pair.supplierColumn !== "" ? cellToString(row[Number(pair.supplierColumn)]) : "") || pair.defaultSupplierName || "Поставщик";
+          const count = pair.countColumn !== "" ? cellToNumber(row[Number(pair.countColumn)]) || 0 : 0;
 
-          records.push({ productId: product.id, supplierName, price });
+          records.push({ productId: product.id, supplierName, price, count });
         }
       }
 
@@ -136,12 +138,17 @@ export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
           <div>
             <Group justify="space-between" mb="xs">
               <Text size="sm" fw={500}>
-                Пары «цена + поставщик»
+                Тройки «цена + поставщик + остаток»
               </Text>
               <ActionIcon
                 variant="subtle"
-                onClick={() => setPairs((p) => [...p, { id: createId(), priceColumn: "", supplierColumn: "", defaultSupplierName: "" }])}
-                aria-label="Добавить пару"
+                onClick={() =>
+                  setPairs((p) => [
+                    ...p,
+                    { id: createId(), priceColumn: "", supplierColumn: "", defaultSupplierName: "", countColumn: "" },
+                  ])
+                }
+                aria-label="Добавить тройку"
               >
                 <IconPlus size={16} />
               </ActionIcon>
@@ -172,6 +179,15 @@ export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
                     value={pair.defaultSupplierName}
                     onChange={(e) => updatePair(index, { defaultSupplierName: e.currentTarget.value })}
                   />
+                  <Select
+                    placeholder="колонка остатка"
+                    style={{ flex: 1 }}
+                    data={columnOptions}
+                    value={pair.countColumn || null}
+                    onChange={(v) => updatePair(index, { countColumn: v ?? "" })}
+                    searchable
+                    clearable
+                  />
                   <ActionIcon variant="subtle" color="red" onClick={() => setPairs((p) => p.filter((_, i) => i !== index))} aria-label="Удалить">
                     <IconTrash size={16} />
                   </ActionIcon>
@@ -181,9 +197,9 @@ export function ImportSupplierPricesModal({ onDone }: { onDone: () => void }) {
           </div>
 
           <Alert color="blue" variant="light">
-            Формат подходит для отчётов «лучшие предложения» (PriceFirst/PartnerFirst, PriceSecond/PartnerSecond, ...) — добавьте по одной паре
-            колонок на каждого поставщика. Строки с пустой или нулевой ценой пропускаются. После импорта цены для всех маркетплейсов
-            пересчитаются автоматически.
+            Формат подходит для отчётов «лучшие предложения» (PriceFirst/PartnerFirst, PriceSecond/PartnerSecond, ...) — добавьте по одной
+            тройке колонок на каждого поставщика. Колонка остатка необязательна — без неё остаток будет 0. Строки с пустой или нулевой
+            ценой пропускаются. После импорта цены для всех маркетплейсов пересчитаются автоматически.
           </Alert>
 
           <Group justify="flex-end">
