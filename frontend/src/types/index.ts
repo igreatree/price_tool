@@ -65,6 +65,10 @@ export interface Marketplace {
   /** Основная JS-формула, вычисляющая итоговую цену из startPrice и переменных (обязателен явный
    * return числа). */
   priceFormulaScript: string;
+  /** JS-скрипт, вычисляющий чистую выручку («выручка»). Видит финальный контекст плюс price. */
+  netProceedsScript: string;
+  /** JS-скрипт, вычисляющий «X» (маржинальность). Видит тот же контекст плюс price и netProceeds. */
+  marginRatioScript: string;
   createdAt: string;
 }
 

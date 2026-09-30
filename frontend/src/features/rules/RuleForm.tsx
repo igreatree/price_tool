@@ -251,14 +251,14 @@ export function RuleForm({ marketplace, rule, onSaved }: Props) {
       "Основная формула",
       warnings,
     );
-    const commissionRate = Number(context.commissionRate) || 0;
-    const discount = Number(context.discount) || 0;
-    const taxRate = Number(context.taxRate) || 0;
-    const logistics = Number(context.logistics) || 0;
-    const ads = Number(context.ads) || 0;
-    const otherExpenses = Number(context.otherExpenses) || 0;
-    const netProceeds = price - price * commissionRate - price * (1 - discount) * taxRate - logistics - ads - otherExpenses;
-    const marginRatio = price !== 0 ? netProceeds / price : 0;
+    const netProceeds = runExpressionScript(marketplace.netProceedsScript, { ...context, price }, 0, "Формула выручки", warnings);
+    const marginRatio = runExpressionScript(
+      marketplace.marginRatioScript,
+      { ...context, price, netProceeds },
+      0,
+      "Формула X",
+      warnings,
+    );
 
     setPreviewResult({ matches: true, price, netProceeds, marginRatio, diff, warnings: warnings.length ? warnings : undefined });
   }

@@ -44,6 +44,12 @@ export class CreateMarketplaceDto {
 
   @IsString()
   priceFormulaScript!: string;
+
+  @IsString()
+  netProceedsScript!: string;
+
+  @IsString()
+  marginRatioScript!: string;
 }
 
 export class UpdateMarketplaceDto extends CreateMarketplaceDto {}

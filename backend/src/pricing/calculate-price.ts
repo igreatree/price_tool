@@ -60,8 +60,11 @@ function isProductExcluded(input: CalculatePriceInput, context: ExpressionContex
  * Расчёт цены для одной пары (товар, маркетплейс):
  * 1. Строим базовый контекст (идентичность товара + переменные из MarketplaceProductParams).
  * 2. Проверяем исключение — если товар исключён, цену не трогаем.
- * 3. Себестоимость должна быть больше нуля.
- * 4. marketplace.startPriceScript вычисляет стартовую цену (startPrice) от базового контекста.
+ * 3. marketplace.startPriceScript вычисляет стартовую цену (startPrice) от базового контекста —
+ *    себестоимость товара тут лишь запасной вариант (по умолчанию startPriceScript её и
+ *    использует), а не обязательное условие: если скрипт берёт цену у поставщика, startPrice
+ *    может быть больше нуля даже при незаполненной себестоимости.
+ * 4. Стартовая цена должна быть больше нуля — иначе считать не от чего.
  * 5. Каскад правил по возрастанию приоритета: у каждого подошедшего правила выполняется
  *    actionScript, который может изменить переменные (включая startPrice) или завести новые.
  *    Немаксимальное (isFinal === false) правило не останавливает каскад — поиск продолжается со
@@ -69,7 +72,8 @@ function isProductExcluded(input: CalculatePriceInput, context: ExpressionContex
  * 6. marketplace.priceFormulaScript вычисляет итоговую цену от startPrice и финального состояния
  *    переменных.
  * 7. Применяются ограничения min/max цены и округление.
- * 8. netProceeds/marginRatio считаются по финальным переменным — для отчётности.
+ * 8. netProceedsScript/marginRatioScript считают «выручку» и «X» по финальным переменным и
+ *    итоговой цене — тоже настраиваются в маркетплейсе, а не зашиты в код.
  */
 export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult {
   const { product, marketplace, rules } = input;
@@ -81,11 +85,6 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     return { ...emptyResult(product.id, marketplace.id, [EXCLUDED_WARNING]), excluded: true };
   }
 
-  if (!Number.isFinite(product.cost) || product.cost <= 0) {
-    warnings.push("Себестоимость не задана или не больше нуля");
-    return emptyResult(product.id, marketplace.id, warnings);
-  }
-
   const startPrice = runExpressionScript(
     marketplace.startPriceScript,
     baseContext,
@@ -93,6 +92,11 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
     "Начальная цена",
     warnings,
   );
+
+  if (!Number.isFinite(startPrice) || startPrice <= 0) {
+    warnings.push("Стартовая цена не определена или не больше нуля");
+    return emptyResult(product.id, marketplace.id, warnings);
+  }
 
   let context: ExpressionContext = { ...baseContext, startPrice };
   const protectedKeys = protectedContextKeys(product);
@@ -155,15 +159,14 @@ export function calculatePrice(input: CalculatePriceInput): CalculatePriceResult
 
   price = applyRounding(price, marketplace.rounding);
 
-  const commissionRate = Number(context.commissionRate) || 0;
-  const discount = Number(context.discount) || 0;
-  const taxRate = Number(context.taxRate) || 0;
-  const logistics = Number(context.logistics) || 0;
-  const ads = Number(context.ads) || 0;
-  const otherExpenses = Number(context.otherExpenses) || 0;
-  const netProceeds =
-    price - price * commissionRate - price * (1 - discount) * taxRate - logistics - ads - otherExpenses;
-  const marginRatio = price !== 0 ? netProceeds / price : 0;
+  const netProceeds = runExpressionScript(marketplace.netProceedsScript, { ...context, price }, 0, "Формула выручки", warnings);
+  const marginRatio = runExpressionScript(
+    marketplace.marginRatioScript,
+    { ...context, price, netProceeds },
+    0,
+    "Формула X",
+    warnings,
+  );
 
   return {
     productId: product.id,

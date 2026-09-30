@@ -85,6 +85,20 @@ model Marketplace {
    * return startPrice / (1 - commissionRate) + logistics + ads + otherExpenses;
    */
   priceFormulaScript String   @default("return startPrice;")
+  /**
+   * JS-скрипт, вычисляющий чистую выручку («выручка» в таблице «Расчёт»). Обязателен явный return
+   * числа. Видит финальный контекст (после каскада правил) плюс price — итоговую (округлённую)
+   * цену товара. Пример по умолчанию — цена минус комиссия минус налог минус расходы:
+   * return price - price*commissionRate - price*(1-discount)*taxRate - logistics - ads - otherExpenses;
+   */
+  netProceedsScript  String   @default("return price - price*commissionRate - price*(1-discount)*taxRate - logistics - ads - otherExpenses;")
+  /**
+   * JS-скрипт, вычисляющий «X» (маржинальность) в таблице «Расчёт». Обязателен явный return
+   * числа. Видит тот же контекст, что и netProceedsScript, плюс netProceeds — уже посчитанную
+   * чистую выручку. По умолчанию — отношение выручки к цене:
+   * return price !== 0 ? netProceeds / price : 0;
+   */
+  marginRatioScript  String   @default("return price !== 0 ? netProceeds / price : 0;")
   createdAt          DateTime @default(now())
 
   rules                    Rule[]

@@ -14,6 +14,9 @@ interface Props {
 
 const DEFAULT_START_PRICE_SCRIPT = "return cost;";
 const DEFAULT_PRICE_FORMULA_SCRIPT = "return startPrice;";
+const DEFAULT_NET_PROCEEDS_SCRIPT =
+  "return price - price*commissionRate - price*(1-discount)*taxRate - logistics - ads - otherExpenses;";
+const DEFAULT_MARGIN_RATIO_SCRIPT = "return price !== 0 ? netProceeds / price : 0;";
 
 export function MarketplaceForm({ marketplace, onSaved }: Props) {
   const [name, setName] = useState(marketplace?.name ?? "");
@@ -26,6 +29,8 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
   const [exclusionCondition, setExclusionCondition] = useState(marketplace?.exclusionCondition ?? "");
   const [startPriceScript, setStartPriceScript] = useState(marketplace?.startPriceScript ?? DEFAULT_START_PRICE_SCRIPT);
   const [priceFormulaScript, setPriceFormulaScript] = useState(marketplace?.priceFormulaScript ?? DEFAULT_PRICE_FORMULA_SCRIPT);
+  const [netProceedsScript, setNetProceedsScript] = useState(marketplace?.netProceedsScript ?? DEFAULT_NET_PROCEEDS_SCRIPT);
+  const [marginRatioScript, setMarginRatioScript] = useState(marketplace?.marginRatioScript ?? DEFAULT_MARGIN_RATIO_SCRIPT);
   const [saving, setSaving] = useState(false);
 
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
@@ -46,6 +51,8 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
       exclusionCondition: exclusionCondition.trim(),
       startPriceScript: startPriceScript.trim() || DEFAULT_START_PRICE_SCRIPT,
       priceFormulaScript: priceFormulaScript.trim() || DEFAULT_PRICE_FORMULA_SCRIPT,
+      netProceedsScript: netProceedsScript.trim() || DEFAULT_NET_PROCEEDS_SCRIPT,
+      marginRatioScript: marginRatioScript.trim() || DEFAULT_MARGIN_RATIO_SCRIPT,
     };
     setSaving(true);
     try {
@@ -117,7 +124,21 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
               <Table.Td>
                 <code>startPrice</code>
               </Table.Td>
-              <Table.Td>Только в основной формуле — результат скрипта «Стартовая цена» (или изменённый правилами)</Table.Td>
+              <Table.Td>
+                В основной формуле и далее — результат скрипта «Стартовая цена» (или изменённый правилами)
+              </Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>price</code>
+              </Table.Td>
+              <Table.Td>Только в формулах «Выручка» и «X» — итоговая (округлённая) цена товара</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
+              <Table.Td>
+                <code>netProceeds</code>
+              </Table.Td>
+              <Table.Td>Только в формуле «X» — уже посчитанная формулой «Выручка» чистая выручка</Table.Td>
             </Table.Tr>
           </Table.Tbody>
         </Table>
@@ -153,6 +174,32 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
         />
       </div>
 
+      <div>
+        <Text size="sm" fw={500} mb={4}>
+          Формула выручки (JS)
+        </Text>
+        <Text size="xs" c="dimmed" mb="xs">
+          Обязателен явный <code>return</code> числа. Вычисляет «выручку» в таблице «Расчёт» — по умолчанию цена минус комиссия минус
+          налог минус расходы, но можно задать свою.
+        </Text>
+        <ScriptInput
+          value={netProceedsScript}
+          onChange={setNetProceedsScript}
+          placeholder={DEFAULT_NET_PROCEEDS_SCRIPT}
+        />
+      </div>
+
+      <div>
+        <Text size="sm" fw={500} mb={4}>
+          Формула X (JS)
+        </Text>
+        <Text size="xs" c="dimmed" mb="xs">
+          Обязателен явный <code>return</code> числа. Вычисляет «X» (маржинальность) в таблице «Расчёт» — по умолчанию отношение
+          выручки к цене.
+        </Text>
+        <ScriptInput value={marginRatioScript} onChange={setMarginRatioScript} placeholder={DEFAULT_MARGIN_RATIO_SCRIPT} />
+      </div>
+
       <Group grow align="flex-start">
         <Select
           label="Округление"
@@ -184,7 +231,7 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
         </Text>
         <Text size="xs" c="dimmed" mb="xs">
           Цена этих товаров не будет меняться при пересчёте (вручную или автоматически после правок) для этого маркетплейса — в таблице
-          «Расчёт цен» они помечаются предупреждением «исключён».
+          «Расчёт» они помечаются предупреждением «исключён».
         </Text>
         <Stack gap="xs">
           <MultiSelect

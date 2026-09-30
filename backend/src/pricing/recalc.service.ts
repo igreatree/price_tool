@@ -51,6 +51,8 @@ function toMarketplaceLike(m: Marketplace): MarketplaceLike {
     exclusionCondition: m.exclusionCondition,
     startPriceScript: m.startPriceScript,
     priceFormulaScript: m.priceFormulaScript,
+    netProceedsScript: m.netProceedsScript,
+    marginRatioScript: m.marginRatioScript,
   };
 }
 

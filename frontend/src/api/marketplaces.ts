@@ -10,6 +10,8 @@ export interface MarketplaceInput {
   exclusionCondition?: string;
   startPriceScript: string;
   priceFormulaScript: string;
+  netProceedsScript: string;
+  marginRatioScript: string;
 }
 
 export const marketplacesApi = {
