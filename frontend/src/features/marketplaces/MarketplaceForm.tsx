@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Group, MultiSelect, NumberInput, Select, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, MultiSelect, NumberInput, Select, Stack, Table, Text, Textarea, TextInput } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { marketplacesApi } from "../../api/marketplaces";
 import { productsApi } from "../../api/products";
 import { ExpressionInput } from "../../components/ExpressionInput";
@@ -26,6 +27,7 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
   const [minPriceFormula, setMinPriceFormula] = useState(marketplace?.minPriceFormula ?? "");
   const [maxPriceFormula, setMaxPriceFormula] = useState(marketplace?.maxPriceFormula ?? "");
   const [excludedProductIds, setExcludedProductIds] = useState<string[]>(marketplace?.excludedProductIds ?? []);
+  const [excludedIdsText, setExcludedIdsText] = useState("");
   const [exclusionCondition, setExclusionCondition] = useState(marketplace?.exclusionCondition ?? "");
   const [startPriceScript, setStartPriceScript] = useState(marketplace?.startPriceScript ?? DEFAULT_START_PRICE_SCRIPT);
   const [priceFormulaScript, setPriceFormulaScript] = useState(marketplace?.priceFormulaScript ?? DEFAULT_PRICE_FORMULA_SCRIPT);
@@ -35,6 +37,26 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
 
   const { data: products } = useQuery({ queryKey: ["products"], queryFn: productsApi.list });
   const productOptions = useMemo(() => (products ?? []).map((p) => ({ value: p.id, label: `${p.externalId} — ${p.name}` })), [products]);
+  const productByExternalId = useMemo(() => new Map((products ?? []).map((p) => [p.externalId, p])), [products]);
+
+  function handleAddExcludedByText() {
+    const ids = excludedIdsText
+      .split(/[,;\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const matched: string[] = [];
+    const notFound: string[] = [];
+    for (const externalId of ids) {
+      const product = productByExternalId.get(externalId);
+      if (product) matched.push(product.id);
+      else notFound.push(externalId);
+    }
+    setExcludedProductIds((prev) => Array.from(new Set([...prev, ...matched])));
+    setExcludedIdsText("");
+    if (notFound.length) {
+      notifications.show({ message: `Товары не найдены по ProductID: ${notFound.join(", ")}`, color: "yellow" });
+    }
+  }
 
   async function handleSubmit() {
     if (!name.trim()) return;
@@ -234,6 +256,22 @@ export function MarketplaceForm({ marketplace, onSaved }: Props) {
           «Расчёт» они помечаются предупреждением «исключён».
         </Text>
         <Stack gap="xs">
+          <Group align="flex-end" wrap="nowrap">
+            <Textarea
+              label="Добавить по ProductID"
+              description="Список через запятую, пробел или с новой строки: 81245, 84321, 87653"
+              placeholder="81245, 84321, 87653"
+              style={{ flex: 1 }}
+              autosize
+              minRows={1}
+              maxRows={4}
+              value={excludedIdsText}
+              onChange={(e) => setExcludedIdsText(e.currentTarget.value)}
+            />
+            <Button variant="light" onClick={handleAddExcludedByText} disabled={!excludedIdsText.trim()}>
+              Добавить
+            </Button>
+          </Group>
           <MultiSelect
             label="Исключённые товары"
             placeholder="Выберите товары"

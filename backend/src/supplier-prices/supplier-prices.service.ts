@@ -15,7 +15,11 @@ export class SupplierPricesService {
   }
 
   async create(dto: CreateSupplierPriceDto) {
-    const record = await this.prisma.supplierPrice.create({ data: dto });
+    const record = await this.prisma.supplierPrice.upsert({
+      where: { productId_supplierName: { productId: dto.productId, supplierName: dto.supplierName } },
+      create: dto,
+      update: { price: dto.price, count: dto.count ?? 0 },
+    });
     await this.recalcService.recalcProductAllMarketplaces(record.productId);
     return record;
   }
@@ -26,8 +30,24 @@ export class SupplierPricesService {
   }
 
   async import(rows: ImportSupplierPriceRowDto[]) {
-    const result = await this.prisma.supplierPrice.createMany({ data: rows });
+    // Keep only the last row per (productId, supplierName) so a single import never
+    // creates two prices for the same product+supplier pair.
+    const deduped = new Map<string, ImportSupplierPriceRowDto>();
+    for (const row of rows) {
+      deduped.set(`${row.productId}\u0000${row.supplierName}`, row);
+    }
+    const uniqueRows = [...deduped.values()];
+
+    await this.prisma.$transaction(
+      uniqueRows.map((row) =>
+        this.prisma.supplierPrice.upsert({
+          where: { productId_supplierName: { productId: row.productId, supplierName: row.supplierName } },
+          create: row,
+          update: { price: row.price, count: row.count ?? 0 },
+        }),
+      ),
+    );
     await this.recalcService.recalcAllMarketplaces();
-    return { imported: result.count };
+    return { imported: uniqueRows.length };
   }
 }
